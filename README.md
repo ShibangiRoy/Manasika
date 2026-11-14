@@ -1,32 +1,67 @@
-# Manisika
+# Manasika
 
-A calming, responsive mental wellness and creative community prototype distilled from the November 12 brainstorming notes.
+Manasika is a student wellness web app built from the Figma-exported React application in `shivUIdes/MANASIKA Wellness Platform (UI)`. Its screens, navigation, and feature interactions are served by the Node.js web server.
 
-The shell's logo, warm cream base, lavender/sage/rose palette, rounded cards, and serif/sans type pairing are adapted from the local Figma export in `shivUIdes/MANASIKA Wellness Platform (UI)`. The existing Manisika notebook tabs and feature implementations remain in place.
+## Requirements
 
-## Ideas carried into the prototype
+- Node.js 22 or later and npm
+- Docker Desktop, if using the container pipeline
 
-- A personal welcome with language and comfort sound preferences.
-- A private daily emotional check-in, notes, calendar, and gentle history view.
-- Recommendations that adapt to recent check-ins, including extra calming suggestions after three low days.
-- A breathing timer, five-to-one grounding countdown, private reflection room, and supportive check-in bot.
-- Anonymous, structured community posts around campus pressure, confidence, heartbreak, fresh starts, and creative expression, with basic harmful-language blocking and reporting controls.
-- A human-led creative studio for finding music and art collaborators. It does not generate or autotune creative work.
-- A crisis message that directs people to local emergency support and trusted people.
-- A local, rule-based support library with grounding and self-kindness prompts informed by the [WHO stress management guide](https://www.who.int/publications/i/item/9789240003927).
+## Install and run locally
 
-## Run it
+From the workspace root, install the app’s locked dependencies and build the production website:
 
-Run `node server.js`, then open [http://127.0.0.1:4173](http://127.0.0.1:4173). No packages, build step, or account are needed. Preferences, mood entries, reflections, and locally created posts are stored in that browser's local storage.
+```powershell
+cd "shivUIdes/MANASIKA Wellness Platform (UI)"
+npm ci
+npm run build
+```
 
-Build the container with `docker build -t manisika .` and run it with `docker run --rm -p 127.0.0.1:4173:4173 manisika`.
+Then return to the workspace root and start the web server:
+
+```powershell
+cd ../..
+node server.js
+```
+
+Open [http://127.0.0.1:4173](http://127.0.0.1:4173).
+
+### Development pipeline
+
+For live UI development, run Vite from the React project folder instead of building first:
+
+```powershell
+cd "shivUIdes/MANASIKA Wellness Platform (UI)"
+npm ci
+npm run dev -- --host 127.0.0.1 --port 4173
+```
+
+Vite serves the app at [http://127.0.0.1:4173](http://127.0.0.1:4173) and refreshes the page as source files change. Stop it with `Ctrl+C`.
+
+### Production build pipeline
+
+1. `npm ci` installs the exact dependency versions in `package-lock.json`.
+2. `npm run build` creates the optimized static website in the React project’s `dist` directory.
+3. `node server.js` serves that build and provides the optional local model endpoints.
+
+## Docker pipeline
+
+Build the image from the workspace root so Docker can access the React project and server files:
+
+```powershell
+docker build -t manasika .
+docker run --rm -p 127.0.0.1:4173:4173 manasika
+```
+
+The Dockerfile installs dependencies and builds the React app in a build stage, then copies the static output and Node server into a smaller runtime image. Open [http://127.0.0.1:4173](http://127.0.0.1:4173) while the container is running. Stop it with `Ctrl+C`.
 
 ## Optional local model
 
-The app can call an installed Ollama model through the Node server. The user must opt in under profile preferences; the browser sends chat turns to `/api/chat`, and the server forwards them only to the configured Ollama URL. It does not forward mood notes or event logs. Configure `MANISIKA_OLLAMA_URL` and `MANISIKA_OLLAMA_MODEL` in the server environment; `.env.example` shows the local endpoint. Without that configuration, chat uses its local rule-based fallback. No cloud provider is configured by default.
+The Node server can forward chat requests to a locally running Ollama model. Set `MANISIKA_OLLAMA_URL` and `MANISIKA_OLLAMA_MODEL` in the server environment before starting `node server.js`. The optional `/api/status` and `/api/chat` endpoints are served by the same process. The container listens on port `4173`; configure model variables when launching it if the model is available to the container.
 
-The onboarding profile asks about likes, dislikes, preferred language and sound, and an optional starting mood. Mood patterns summarize the user’s self-reported check-ins and chosen context; this is not raw keystroke analysis or a clinical assessment. Data events omit free-text mood notes. The user can export or clear local records from Mood patterns.
+## Project layout
 
-## Prototype boundaries
-
-This is a local prototype, not a clinical or crisis service. It has no authentication, encryption, moderation service, location access, clinician directory, real-time messaging, or cross-device sync. Community examples are seeded demo content. The fallback bot uses local response rules and is not a therapist. No model fine-tuning has been performed; fine-tuning requires selecting a model, a permitted training dataset, and a training/runtime environment. Avoid storing sensitive information on a shared device.
+- `shivUIdes/MANASIKA Wellness Platform (UI)/` — React, Vite, and Tailwind application source
+- `server.js` — static website server and optional local model endpoints
+- `Dockerfile` — multi-stage container build and runtime
+- `.dockerignore` — files excluded from the container build context
