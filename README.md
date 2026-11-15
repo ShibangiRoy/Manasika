@@ -1,6 +1,6 @@
 # Manasika
 
-Manasika is a student wellness prototype built from the Figma-exported React app in `shivUIdes/MANASIKA Wellness Platform (UI)`. The Render configuration builds and serves this Figma UI directly; the older workspace mockup is not part of the deployment.
+Manasika is a student wellness prototype built from the Figma-exported React app in `shivUIdes/manasika-ui`. The Render configuration builds and serves this Figma UI directly; the older workspace mockup is not part of the deployment.
 
 ## URLs
 
@@ -17,7 +17,7 @@ Manasika is a student wellness prototype built from the Figma-exported React app
 From the repository root, enter the app folder, install the locked dependencies, and start the development server:
 
 ```powershell
-cd "shivUIdes/MANASIKA Wellness Platform (UI)"
+cd "shivUIdes/manasika-ui"
 npm ci
 npm run dev -- --host 0.0.0.0 --port 4173
 ```
@@ -43,7 +43,7 @@ npm run preview -- --host 0.0.0.0 --port 4173
 
 The root `render.yaml` is configured for the existing Figma app folder:
 
-- Root directory: `shivUIdes/MANASIKA Wellness Platform (UI)`
+- Root directory: `shivUIdes/manasika-ui`
 - Build command: `npm ci && npm run build`
 - Publish directory: `dist`
 - Branch: `main`
@@ -54,7 +54,7 @@ Connect the GitHub repository in Render and sync/approve the Blueprint. After th
 
 If Render’s API or connection remains unavailable, connect the GitHub repository to a Cloudflare Pages project and configure:
 
-- Root directory: `shivUIdes/MANASIKA Wellness Platform (UI)`
+- Root directory: `shivUIdes/manasika-ui`
 - Build command: `npm ci && npm run build`
 - Build output directory: `dist`
 - Production branch: `main`
@@ -67,5 +67,5 @@ Profile preferences, mood check-ins, reflection entries, community drafts, group
 
 ## Project layout
 
-- `shivUIdes/MANASIKA Wellness Platform (UI)/` — React and Vite app source
+- `shivUIdes/manasika-ui/` — React and Vite app source
 - `render.yaml` — Render static-site configuration
