@@ -1,0 +1,10 @@
+{
+  "description": "A private emotional wellness and student-life companion helping college students explore psychology, track moods, journal, find calm, and build personal growth.",
+  "robots": {
+    "index": false
+  },
+  "accessibility": {
+    "addBypassLinks": false,
+    "ignoreReducedMotion": false
+  }
+}
