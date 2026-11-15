@@ -1381,13 +1381,13 @@ function MoodJourney({
   checkIns: MoodCheckIn[];
   onSave: (entry: Omit<MoodCheckIn, "id" | "date">) => void;
 }) {
+  const now = useCurrentTime();
   const [tags, setTags] = useState<string[]>([]);
   const [note, setNote] = useState("");
   const [saved, setSaved] = useState(false);
   const [monthOffset, setMonthOffset] = useState(0);
   const [selectedDay, setSelectedDay] = useState<number | null>(null);
-  const monthDate = new Date();
-  monthDate.setDate(1);
+  const monthDate = new Date(now.getFullYear(), now.getMonth(), 1);
   monthDate.setMonth(monthDate.getMonth() + monthOffset);
   const monthLabel = monthDate.toLocaleDateString(undefined, { month: "long", year: "numeric" });
   const monthDays = new Date(monthDate.getFullYear(), monthDate.getMonth() + 1, 0).getDate();
@@ -2080,6 +2080,15 @@ function Creative() {
   const [tab, setTab] = useState("My Art");
   const [story, setStory] = useState("");
   const [saved, setSaved] = useState(false);
+  const artPrompts = [
+    "If today had a colour and shape, what would it be?",
+    "Draw a small place where you would feel safe to rest.",
+    "Turn one feeling from today into a landscape.",
+    "Make an abstract picture of a fresh start.",
+    "Imagine a tiny garden that grows around something you love.",
+  ];
+  const [artPromptIndex, setArtPromptIndex] = useState(0);
+  const [artPrompt, setArtPrompt] = useState(artPrompts[0]);
   return (
     <div className="page">
       <PageHeader
@@ -2134,13 +2143,26 @@ function Creative() {
           <aside className="creative-prompt">
             <Icon name="spark" />
             <small>CREATIVE PROMPT</small>
-            <h2>If today had a colour and shape, what would it be?</h2>
+            <h2>Your next creation</h2>
+            <label className="creative-prompt-field">
+              <span>Use or edit this prompt</span>
+              <textarea
+                aria-label="Creative prompt for your next artwork"
+                value={artPrompt}
+                onChange={(event) => setArtPrompt(event.target.value)}
+                rows={4}
+              />
+            </label>
             <p>
               It can be messy, unfinished, abstract, or quiet. It only needs to feel like yours.
             </p>
             <Button
               variant="secondary"
-              onClick={() => window.alert("A new private creative prompt is ready.")}
+              onClick={() => {
+                const nextIndex = (artPromptIndex + 1) % artPrompts.length;
+                setArtPromptIndex(nextIndex);
+                setArtPrompt(artPrompts[nextIndex]);
+              }}
             >
               New prompt
             </Button>

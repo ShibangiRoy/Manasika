@@ -2728,6 +2728,28 @@
   resize: none;
   margin: 15px 0;
 }
+.creative-prompt-field {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  gap: 6px;
+  margin: 8px 0 4px;
+}
+.creative-prompt-field > span {
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--ink-soft);
+}
+.creative-prompt .creative-prompt-field textarea {
+  min-height: 112px;
+  margin: 0;
+  resize: vertical;
+  background: rgba(255, 255, 255, 0.72);
+  color: var(--ink);
+  font: inherit;
+  font-size: 11px;
+  line-height: 1.7;
+}
 .story-editor {
   display: flex;
   flex-direction: column;
