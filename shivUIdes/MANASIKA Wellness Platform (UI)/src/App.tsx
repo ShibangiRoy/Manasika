@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import manasikaLogo from "./assets/manasika-logo.webp";
 
 type Page =
@@ -15,7 +15,8 @@ type Page =
   | "cosmic"
   | "growth"
   | "companion"
-  | "support";
+  | "support"
+  | "community";
 
 type IconName =
   | "home"
@@ -41,7 +42,70 @@ type IconName =
   | "plus"
   | "trash"
   | "clock"
-  | "edit";
+  | "edit"
+  | "users";
+
+type UserProfile = {
+  name: string;
+  likes: string[];
+  dislikes: string[];
+  supportGoals: string[];
+  insightsEnabled: boolean;
+};
+
+type MoodCheckIn = {
+  id: string;
+  date: string;
+  mood: number;
+  tags: string[];
+  note: string;
+};
+
+type CommunityPost = {
+  id: string;
+  groupId: string;
+  group: string;
+  text: string;
+  createdAt: string;
+};
+
+type ActivityItem = { id: string; date: string; action: string; area: string };
+
+const defaultProfile: UserProfile = {
+  name: "",
+  likes: [],
+  dislikes: [],
+  supportGoals: [],
+  insightsEnabled: false,
+};
+
+function useSavedState<T>(key: string, initial: T) {
+  const [value, setValue] = useState<T>(() => {
+    try {
+      const stored = window.localStorage.getItem(key);
+      return stored ? (JSON.parse(stored) as T) : initial;
+    } catch {
+      return initial;
+    }
+  });
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(key, JSON.stringify(value));
+    } catch {
+      // The app remains usable if browser storage is disabled or full.
+    }
+  }, [key, value]);
+  return [value, setValue] as const;
+}
+
+function todayKey() {
+  const date = new Date();
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
+function recordActivity(setActivity: React.Dispatch<React.SetStateAction<ActivityItem[]>>, action: string, area: string) {
+  setActivity((items) => [{ id: crypto.randomUUID(), date: new Date().toISOString(), action, area }, ...items].slice(0, 300));
+}
 
 const iconPaths: Record<IconName, React.ReactNode> = {
   home: (
@@ -158,6 +222,12 @@ const iconPaths: Record<IconName, React.ReactNode> = {
       <path d="m13.8 7 3.2 3.2" />
     </>
   ),
+  users: (
+    <>
+      <circle cx="9" cy="8" r="3" />
+      <path d="M3 20v-1a6 6 0 0 1 12 0v1M16 5.2a3 3 0 0 1 0 5.6M18 14a5 5 0 0 1 3 4.5V20" />
+    </>
+  ),
 };
 
 function Icon({ name, size = 20 }: { name: IconName; size?: number }) {
@@ -240,6 +310,7 @@ const navItems: { id: Page; label: string; icon: IconName }[] = [
   { id: "growth", label: "My Growth", icon: "growth" },
   { id: "companion", label: "AI Companion", icon: "chat" },
   { id: "support", label: "Find Support", icon: "heart" },
+  { id: "community", label: "Community", icon: "users" },
 ];
 
 const moods = [
@@ -324,6 +395,13 @@ const topics = [
   },
 ];
 
+const communityGroups = [
+  { id: "quiet-study", name: "Quiet Study Circle", text: "Gentle study check-ins and kinder plans.", tags: ["Learning", "Quiet time", "Academic pressure"], icon: "student" as IconName },
+  { id: "creative-corner", name: "Creative Corner", text: "Share prompts, sketches, music, and small ideas.", tags: ["Art", "Music", "Writing"], icon: "palette" as IconName },
+  { id: "soft-starts", name: "Soft Starts", text: "A calm place for routines, rest, and starting again.", tags: ["Rest & sleep", "Nature", "Movement"], icon: "leaf" as IconName },
+  { id: "friendship", name: "Friendship & Boundaries", text: "Talk through connection, confidence, and limits.", tags: ["Friends", "Relationships", "Confidence & overthinking"], icon: "heart" as IconName },
+];
+
 const calendarMoods: Record<number, number> = {
   2: 1,
   4: 2,
@@ -361,11 +439,13 @@ function AppShell({
   setPage,
   children,
   openSettings,
+  profile,
 }: {
   page: Page;
   setPage: (p: Page) => void;
   children: React.ReactNode;
   openSettings: () => void;
+  profile: UserProfile;
 }) {
   const [mobileOpen, setMobileOpen] = useState(false);
   return (
@@ -403,9 +483,9 @@ function AppShell({
           ))}
         </nav>
         <button className="profile-card" onClick={openSettings}>
-          <span className="avatar">A</span>
+          <span className="avatar">{profile.name.trim().slice(0, 1).toUpperCase() || "M"}</span>
           <span>
-            <b>Ananya</b>
+            <b>{profile.name || "Your space"}</b>
             <small>View preferences</small>
           </span>
           <Icon name="settings" size={17} />
@@ -609,10 +689,13 @@ function Landing({ setPage }: { setPage: (p: Page) => void }) {
   );
 }
 
-function Onboarding({ finish }: { finish: () => void }) {
+function Onboarding({ finish }: { finish: (profile: UserProfile) => void }) {
   const [step, setStep] = useState(0);
   const [name, setName] = useState("");
   const [selected, setSelected] = useState<string[]>([]);
+  const [likes, setLikes] = useState<string[]>([]);
+  const [dislikes, setDislikes] = useState<string[]>([]);
+  const [insightsEnabled, setInsightsEnabled] = useState(false);
   const steps = [
     <div className="onboard-step" key="welcome">
       <span className="onboard-symbol">
@@ -661,33 +744,16 @@ function Onboarding({ finish }: { finish: () => void }) {
       </div>
     </div>,
     <div className="onboard-step" key="preferences">
-      <Kicker>Your preferences</Kicker>
-      <h1>What helps you feel grounded?</h1>
-      <p>We’ll use this only to personalize optional recommendations.</p>
-      <div className="preference-list">
-        {[
-          ["leaf", "Breathing & mindfulness"],
-          ["journal", "Writing & reflection"],
-          ["play", "Calm music"],
-          ["palette", "Creative activities"],
-        ].map((x) => (
-          <label key={x[1]}>
-            <input type="checkbox" />
-            <span className="choice-icon">
-              <Icon name={x[0] as IconName} />
-            </span>
-            <span>
-              <b>{x[1]}</b>
-              <small>Include in recommendations</small>
-            </span>
-          </label>
-        ))}
+      <Kicker>Your preferences · all optional</Kicker>
+      <h1>What feels like you?</h1>
+      <p>Choose things you enjoy and things you would rather not see in suggestions.</p>
+      <div className="preference-columns">
+        <div><b>I enjoy</b><div className="tag-wrap">{["Writing", "Music", "Art", "Nature", "Movement", "Quiet time", "Friends", "Learning"].map((x) => <Tag key={x} active={likes.includes(x)} onClick={() => setLikes((items) => items.includes(x) ? items.filter((v) => v !== x) : [...items, x])}>{x}</Tag>)}</div></div>
+        <div><b>I prefer to avoid</b><div className="tag-wrap">{["Breathing exercises", "Astrology", "Group sharing", "Notifications", "Long writing", "Motivational quotes"].map((x) => <Tag key={x} active={dislikes.includes(x)} onClick={() => setDislikes((items) => items.includes(x) ? items.filter((v) => v !== x) : [...items, x])}>{x}</Tag>)}</div></div>
       </div>
-      <label className="field compact">
-        <span>
-          Date of birth <small>Optional · for Cosmic Corner only</small>
-        </span>
-        <input type="date" />
+      <label className="setting-row onboarding-insights">
+        <span><b>Show me a private activity summary</b><small>Uses only the sections you visit and check-ins you save on this device. No typing or message content is analyzed.</small></span>
+        <span className="switch"><input type="checkbox" checked={insightsEnabled} onChange={(event) => setInsightsEnabled(event.target.checked)} /><i /></span>
       </label>
     </div>,
     <div className="onboard-step complete" key="complete">
@@ -705,7 +771,7 @@ function Onboarding({ finish }: { finish: () => void }) {
   return (
     <div className="onboarding">
       <div className="onboard-aside">
-        <Logo onClick={finish} />
+        <Logo onClick={() => {}} />
         <div>
           <span className="quote-mark">“</span>
           <blockquote>
@@ -743,7 +809,11 @@ function Onboarding({ finish }: { finish: () => void }) {
               </Button>
             )}
             <Button
-              onClick={() => (step === steps.length - 1 ? finish() : setStep(step + 1))}
+              onClick={() =>
+                step === steps.length - 1
+                  ? finish({ name: name.trim(), likes, dislikes, supportGoals: selected, insightsEnabled })
+                  : setStep(step + 1)
+              }
               icon={step === steps.length - 1 ? "home" : "arrow"}
             >
               {step === steps.length - 1 ? "Enter my space" : "Continue"}
@@ -808,18 +878,22 @@ function Dashboard({
   setPage,
   mood,
   setMood,
+  profile,
 }: {
   setPage: (p: Page) => void;
   mood: number | null;
   setMood: (n: number) => void;
+  profile: UserProfile;
 }) {
   const [saved, setSaved] = useState(false);
+  const lowMood = mood !== null && mood >= 3;
+  const kindChoice = profile.likes.includes("Art") ? "creative" : profile.likes.includes("Writing") ? "reflective" : "gentle";
   return (
     <div className="page dashboard-page">
       <PageHeader
-        eyebrow="Tuesday, 24 September"
-        title="Welcome back, Ananya."
-        text="How are you feeling today?"
+        eyebrow={new Date().toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" })}
+        title={`Welcome${profile.name ? ` back, ${profile.name}` : " to your space"}.`}
+        text={lowMood ? "Let’s make today a little gentler, one small step at a time." : mood !== null ? "You checked in today. Keep what feels good close, and take the next moment as it comes." : "How are you feeling today? There is no right answer."}
         action={
           <button className="privacy-pill">
             <Icon name="lock" />
@@ -833,7 +907,7 @@ function Dashboard({
             <Icon name="mood" />
           </span>
           <h2>Take a moment for yourself.</h2>
-          <p>Every feeling deserves a little space.</p>
+              <p>{lowMood ? "A difficult feeling deserves care, not pressure. You do not have to solve the whole day." : "Every feeling deserves a little space."}</p>
           {saved && (
             <div className="success-note">
               <Icon name="check" /> Thank you for checking in with yourself.
@@ -872,8 +946,8 @@ function Dashboard({
               <span className="duration">
                 <Icon name="clock" /> 3 min
               </span>
-              <h3>Let your shoulders drop</h3>
-              <p>A short grounding pause for the space between classes.</p>
+              <h3>{lowMood ? "Take one small pause" : kindChoice === "creative" ? "Make a tiny thing" : "Let your shoulders drop"}</h3>
+              <p>{lowMood ? "A short grounding pause can help make this moment feel more manageable." : kindChoice === "creative" ? "A low-pressure creative prompt, just for you." : "A short grounding pause for the space between classes."}</p>
               <span className="card-link">
                 Begin exercise <Icon name="arrow" />
               </span>
@@ -885,8 +959,8 @@ function Dashboard({
               <span className="duration">
                 <Icon name="clock" /> 5 min
               </span>
-              <h3>Today’s reflection</h3>
-              <p>What is one thing you need less of today?</p>
+              <h3>{lowMood ? "Name what you need" : "Today’s reflection"}</h3>
+              <p>{lowMood ? "What is one kind thing you can offer yourself in the next ten minutes?" : "What is one thing you need less of today?"}</p>
               <span className="card-link">
                 Start writing <Icon name="arrow" />
               </span>
@@ -1106,17 +1180,10 @@ function Discover({ setPage }: { setPage: (p: Page) => void }) {
   );
 }
 
-function Reflection() {
+function Reflection({ onActivity }: { onActivity: () => void }) {
   const [entry, setEntry] = useState("");
   const [selectedMood, setSelectedMood] = useState<number | null>(null);
-  const [savedEntries, setSavedEntries] = useState([
-    {
-      id: 1,
-      date: "September 22",
-      title: "A quieter kind of progress",
-      text: "I noticed I didn’t immediately say yes today. I gave myself time to think.",
-    },
-  ]);
+  const [savedEntries, setSavedEntries] = useSavedState<{id:number;date:string;title:string;text:string}[]>("manasika.reflections.v1", []);
   const [saved, setSaved] = useState(false);
   const save = () => {
     if (!entry.trim()) return;
@@ -1124,6 +1191,7 @@ function Reflection() {
       { id: Date.now(), date: "Today, 8:42 PM", title: "Today’s reflection", text: entry },
       ...savedEntries,
     ]);
+    onActivity();
     setSaved(true);
   };
   return (
@@ -1232,11 +1300,16 @@ function Reflection() {
 function MoodJourney({
   mood,
   setMood,
+  checkIns,
+  onSave,
 }: {
   mood: number | null;
   setMood: (n: number | null) => void;
+  checkIns: MoodCheckIn[];
+  onSave: (entry: Omit<MoodCheckIn, "id" | "date">) => void;
 }) {
   const [tags, setTags] = useState<string[]>([]);
+  const [note, setNote] = useState("");
   const [saved, setSaved] = useState(false);
   const [monthOffset, setMonthOffset] = useState(0);
   const [selectedDay, setSelectedDay] = useState<number | null>(null);
@@ -1292,13 +1365,13 @@ function MoodJourney({
               <span>
                 A note for yourself <small>Optional</small>
               </span>
-              <textarea placeholder="What might be contributing to this feeling?" />
+              <textarea value={note} onChange={(event) => setNote(event.target.value)} placeholder="What might be contributing to this feeling?" />
             </label>
             <div className="checkin-actions">
-              <button className="text-btn" onClick={() => setSaved(true)}>
+              <button className="text-btn" onClick={() => { if (mood !== null) onSave({ mood, tags: [], note: "" }); setSaved(true); }}>
                 Skip details
               </button>
-              <Button onClick={() => setSaved(true)}>
+              <Button onClick={() => { if (mood !== null) onSave({ mood, tags, note }); setSaved(true); }}>
                 {saved ? "Saved" : "Save today’s check-in"}
               </Button>
             </div>
@@ -2207,11 +2280,11 @@ function Cosmic() {
   );
 }
 
-function Companion({ setPage }: { setPage: (p: Page) => void }) {
+function Companion({ setPage, profile, latestMood }: { setPage: (p: Page) => void; profile: UserProfile; latestMood: number | null }) {
   const [messages, setMessages] = useState<{ from: "ai" | "user"; text: string }[]>([
     {
       from: "ai",
-      text: "Hi Ananya. I’m here to help you think things through—not to judge or diagnose. What feels most present today?",
+      text: `Hi${profile.name ? ` ${profile.name}` : ""}. I’m here to help you think things through—not to judge or diagnose. What feels most present today?`,
     },
   ]);
   const [text, setText] = useState("");
@@ -2222,7 +2295,7 @@ function Companion({ setPage }: { setPage: (p: Page) => void }) {
       { from: "user", text: value },
       {
         from: "ai",
-        text: "That sounds like a lot to carry alongside college. Would you like to talk about what has been weighing on you, or would a short calming exercise feel more helpful right now?",
+        text: latestMood !== null && latestMood >= 3 ? "That sounds heavy. We can take this one small moment at a time. Would you prefer a grounding exercise or a gentle reflection prompt?" : "Thank you for sharing that. Would it help to explore a small next step, or would you rather pause with a calming exercise?",
       },
     ]);
     setText("");
@@ -2313,6 +2386,71 @@ function Companion({ setPage }: { setPage: (p: Page) => void }) {
           </div>
         </aside>
       </div>
+    </div>
+  );
+}
+
+function Community({
+  profile,
+  posts,
+  setPosts,
+  joinedGroups,
+  setJoinedGroups,
+  onActivity,
+}: {
+  profile: UserProfile;
+  posts: CommunityPost[];
+  setPosts: React.Dispatch<React.SetStateAction<CommunityPost[]>>;
+  joinedGroups: string[];
+  setJoinedGroups: React.Dispatch<React.SetStateAction<string[]>>;
+  onActivity: (action: string) => void;
+}) {
+  const [tab, setTab] = useState<"feed" | "groups">("feed");
+  const [groupId, setGroupId] = useState(communityGroups[0].id);
+  const [draft, setDraft] = useState("");
+  const rankedGroups = [...communityGroups].sort((a, b) => {
+    const score = (tags: string[]) => tags.filter((tag) => [...profile.likes, ...profile.supportGoals].includes(tag)).length;
+    return score(b.tags) - score(a.tags);
+  });
+  const publish = () => {
+    const text = draft.trim();
+    if (!text) return;
+    const group = communityGroups.find((item) => item.id === groupId)!;
+    setPosts((items) => [{ id: crypto.randomUUID(), groupId, group: group.name, text, createdAt: new Date().toISOString() }, ...items].slice(0, 100));
+    onActivity("Saved a community draft");
+    setDraft("");
+  };
+  const toggleGroup = (id: string) => {
+    const joined = joinedGroups.includes(id);
+    setJoinedGroups((items) => joined ? items.filter((item) => item !== id) : [...items, id]);
+    onActivity(joined ? "Left a group" : "Joined a group");
+  };
+  return (
+    <div className="page community-page">
+      <PageHeader eyebrow="Find your people" title="A little less alone." text="Explore supportive circles and share at your own pace." action={<span className="privacy-pill"><Icon name="heart" /> Kindness first</span>} />
+      <div className="community-tabs">
+        <Tag active={tab === "feed"} onClick={() => setTab("feed")}>Community posts</Tag>
+        <Tag active={tab === "groups"} onClick={() => setTab("groups")}>Find groups</Tag>
+      </div>
+      <div className="community-notice"><Icon name="lock" /><p><b>Local preview</b> Posts and group choices are stored only in this browser. They are not sent to other people or shared across devices.</p></div>
+      {tab === "feed" ? (
+        <div className="community-layout">
+          <section className="community-main">
+            <div className="community-composer">
+              <Kicker>Share a small thought</Kicker>
+              <h2>You can be here without having it all figured out.</h2>
+              <label className="field"><span>Choose a circle</span><select value={groupId} onChange={(event) => setGroupId(event.target.value)}>{communityGroups.map((group) => <option key={group.id} value={group.id}>{group.name}</option>)}</select></label>
+              <textarea maxLength={500} value={draft} onChange={(event) => setDraft(event.target.value)} placeholder="Share a question, a small win, or something you are working through…" />
+              <div className="community-compose-footer"><small>{draft.length}/500 · Keep identifying details private</small><Button onClick={publish} disabled={!draft.trim()}>Save post</Button></div>
+            </div>
+            <div className="community-feed-head"><div><Kicker>Recent reflections</Kicker><h2>Community board</h2></div><span>{posts.length} saved locally</span></div>
+            {posts.length ? posts.map((post) => <article className="community-post" key={post.id}><div className="community-post-meta"><span className="avatar">{profile.name.trim().slice(0, 1).toUpperCase() || "M"}</span><div><b>{profile.name || "You"}</b><small>{post.group} · {new Date(post.createdAt).toLocaleDateString()}</small></div><button aria-label="Delete post" onClick={() => setPosts((items) => items.filter((item) => item.id !== post.id))}><Icon name="trash" /></button></div><p>{post.text}</p><small className="local-only-label">Saved in this browser only</small></article>) : <div className="community-empty"><span className="card-icon"><Icon name="users" /></span><h3>Your board is quiet for now.</h3><p>Write a first thought above. It will stay on this device until a real community service is connected.</p></div>}
+          </section>
+          <aside className="community-aside"><Kicker>Circles for you</Kicker><h2>Find a gentle fit</h2>{rankedGroups.slice(0, 3).map((group) => <article className="group-mini" key={group.id}><span className="card-icon"><Icon name={group.icon} /></span><b>{group.name}</b><p>{group.text}</p><button onClick={() => { setTab("groups"); setGroupId(group.id); }}>Explore circle <Icon name="arrow" /></button></article>)}</aside>
+        </div>
+      ) : (
+        <section className="community-groups"><div className="community-feed-head"><div><Kicker>Based on what you chose</Kicker><h2>Find your circle</h2></div><span>{joinedGroups.length} joined</span></div><p className="community-intro">Suggestions use only the interests you selected. Your check-ins and journal are never used to match groups.</p><div className="group-grid">{rankedGroups.map((group) => { const joined = joinedGroups.includes(group.id); return <article className="group-card" key={group.id}><span className="card-icon"><Icon name={group.icon} /></span><h3>{group.name}</h3><p>{group.text}</p><div className="tag-wrap">{group.tags.map((tag) => <span className="group-tag" key={tag}>{tag}</span>)}</div><Button variant={joined ? "secondary" : "primary"} onClick={() => toggleGroup(group.id)}>{joined ? "Leave circle" : "Join circle"}</Button></article>; })}</div></section>
+      )}
     </div>
   );
 }
@@ -2438,7 +2576,7 @@ function Modal({
   );
 }
 
-function Settings({ close }: { close: () => void }) {
+function Settings({ close, profile, setProfile, checkIns, activity, clearLocalData }: { close: () => void; profile: UserProfile; setProfile: React.Dispatch<React.SetStateAction<UserProfile>>; checkIns: MoodCheckIn[]; activity: ActivityItem[]; clearLocalData: () => void }) {
   const [tab, setTab] = useState("Preferences");
   return (
     <Modal title="Your preferences" close={close}>
@@ -2453,7 +2591,7 @@ function Settings({ close }: { close: () => void }) {
         <div className="settings-body">
           <label className="field">
             <span>Preferred name</span>
-            <input defaultValue="Ananya" />
+            <input value={profile.name} onChange={(event) => setProfile((p) => ({ ...p, name: event.target.value }))} placeholder="Your preferred name" />
           </label>
           <label className="field">
             <span>Language</span>
@@ -2501,15 +2639,14 @@ function Settings({ close }: { close: () => void }) {
             <p>
               <b>Your reflections and check-ins are private.</b>
               <br />
-              Nothing is visible to other users, and MANASIKA has no public profiles or social
-              features.
+              This prototype stores profile, check-ins, reflections, posts, and activity on this device only. Community drafts are not shared or synced with other people.
             </p>
           </div>
           <Button
             variant="secondary"
             onClick={() => {
               const file = new Blob(
-                [JSON.stringify({ profile: "Ananya", export: "MANASIKA prototype data" }, null, 2)],
+                [JSON.stringify({ profile, checkIns, activity, reflections: JSON.parse(localStorage.getItem("manasika.reflections.v1") || "[]"), posts: JSON.parse(localStorage.getItem("manasika.community.posts.v1") || "[]"), joinedGroups: JSON.parse(localStorage.getItem("manasika.community.groups.v1") || "[]") }, null, 2)],
                 { type: "application/json" },
               );
               const link = document.createElement("a");
@@ -2524,12 +2661,10 @@ function Settings({ close }: { close: () => void }) {
           <Button
             variant="ghost"
             onClick={() =>
-              window.confirm(
-                "Delete all journal and mood data? This prototype will not remove the sample display data.",
-              )
+              window.confirm("Delete all Manasika data saved in this browser? This cannot be undone.") && clearLocalData()
             }
           >
-            Delete journal and mood data
+            Delete all local data
           </Button>
         </div>
       )}
@@ -2542,50 +2677,85 @@ function Settings({ close }: { close: () => void }) {
 
 export default function App() {
   const [page, setPageState] = useState<Page>("home");
-  const [mood, setMood] = useState<number | null>(null);
+  const [profile, setProfile] = useSavedState<UserProfile>("manasika.profile.v1", defaultProfile);
+  const [checkIns, setCheckIns] = useSavedState<MoodCheckIn[]>("manasika.checkins.v1", []);
+  const [posts, setPosts] = useSavedState<CommunityPost[]>("manasika.community.posts.v1", []);
+  const [joinedGroups, setJoinedGroups] = useSavedState<string[]>("manasika.community.groups.v1", []);
+  const [activity, setActivity] = useSavedState<ActivityItem[]>("manasika.activity.v1", []);
+  const [mood, setMood] = useState<number | null>(() => checkIns.find((item) => item.date === todayKey())?.mood ?? null);
   const [settings, setSettings] = useState(false);
+  const logActivity = (action: string, area: string) => recordActivity(setActivity, action, area);
+  const saveCheckIn = (entry: Omit<MoodCheckIn, "id" | "date">) => {
+    const date = todayKey();
+    setCheckIns((items) => {
+      const next = items.filter((item) => item.date !== date);
+      return [...next, { ...entry, id: date, date }].sort((a, b) => a.date.localeCompare(b.date)).slice(-365);
+    });
+    setMood(entry.mood);
+    logActivity("Saved a mood check-in", "Mood Journey");
+  };
   const setPage = (p: Page) => {
     setPageState(p);
+    if (p !== page) logActivity("Opened a section", p);
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
-  const content = useMemo(() => {
+  const finishOnboarding = (nextProfile: UserProfile) => {
+    setProfile(nextProfile);
+    logActivity("Completed preferences", "Onboarding");
+    setPage("dashboard");
+  };
+  let content: React.ReactNode;
     switch (page) {
       case "dashboard":
-        return <Dashboard setPage={setPage} mood={mood} setMood={setMood} />;
+        content = <Dashboard setPage={setPage} mood={mood} setMood={(nextMood) => saveCheckIn({ mood: nextMood, tags: [], note: "" })} profile={profile} />;
+        break;
       case "discover":
-        return <Discover setPage={setPage} />;
+        content = <Discover setPage={setPage} />;
+        break;
       case "reflection":
-        return <Reflection />;
+        content = <Reflection onActivity={() => logActivity("Saved a reflection", "Reflection")} />;
+        break;
       case "mood":
-        return <MoodJourney mood={mood} setMood={setMood} />;
+        content = <MoodJourney mood={mood} setMood={setMood} checkIns={checkIns} onSave={saveCheckIn} />;
+        break;
       case "scenario":
-        return <Scenario />;
+        content = <Scenario />;
+        break;
       case "peace":
-        return <Peace />;
+        content = <Peace />;
+        break;
       case "student":
-        return <StudentLife />;
+        content = <StudentLife />;
+        break;
       case "growth":
-        return <Growth />;
+        content = <Growth />;
+        break;
       case "creative":
-        return <Creative />;
+        content = <Creative />;
+        break;
       case "cosmic":
-        return <Cosmic />;
+        content = <Cosmic />;
+        break;
       case "companion":
-        return <Companion setPage={setPage} />;
+        content = <Companion setPage={setPage} profile={profile} latestMood={mood} />;
+        break;
       case "support":
-        return <Support />;
+        content = <Support />;
+        break;
+      case "community":
+        content = <Community profile={profile} posts={posts} setPosts={setPosts} joinedGroups={joinedGroups} setJoinedGroups={setJoinedGroups} onActivity={(action) => logActivity(action, "Community")} />;
+        break;
       default:
-        return null;
+        content = null;
     }
-  }, [page, mood]);
   if (page === "home") return <Landing setPage={setPage} />;
-  if (page === "onboarding") return <Onboarding finish={() => setPage("dashboard")} />;
+  if (page === "onboarding") return <Onboarding finish={finishOnboarding} />;
   return (
     <>
-      <AppShell page={page} setPage={setPage} openSettings={() => setSettings(true)}>
+      <AppShell page={page} setPage={setPage} openSettings={() => setSettings(true)} profile={profile}>
         {content}
       </AppShell>
-      {settings && <Settings close={() => setSettings(false)} />}
+      {settings && <Settings close={() => setSettings(false)} profile={profile} setProfile={setProfile} checkIns={checkIns} activity={activity} clearLocalData={() => { setCheckIns([]); setPosts([]); setJoinedGroups([]); setActivity([]); setProfile(defaultProfile); localStorage.removeItem("manasika.reflections.v1"); setMood(null); }} />}
     </>
   );
 }

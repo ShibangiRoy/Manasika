@@ -1,67 +1,43 @@
 # Manasika
 
-Manasika is a student wellness web app built from the Figma-exported React application in `shivUIdes/MANASIKA Wellness Platform (UI)`. Its screens, navigation, and feature interactions are served by the Node.js web server.
+Manasika is a student wellness prototype with the Figma-exported React experience in `shivUIdes/MANASIKA Wellness Platform (UI)`. Render builds and serves this folder directly as the production site, so the older workspace-root mockup is not part of the deployment.
 
 ## Requirements
 
-- Node.js 22 or later and npm
-- Docker Desktop, if using the container pipeline
+- Node.js 22.14 or newer (the project pins 22.14 in `.node-version`)
+- npm 10 or newer
 
-## Install and run locally
-
-From the workspace root, install the app’s locked dependencies and build the production website:
+## Run locally
 
 ```powershell
 cd "shivUIdes/MANASIKA Wellness Platform (UI)"
 npm ci
+npm run dev -- --host 127.0.0.1
+```
+
+Open the Vite URL printed in the terminal. To make the production build:
+
+```powershell
 npm run build
+npm run preview -- --host 127.0.0.1
 ```
 
-Then return to the workspace root and start the web server:
+## Render deployment
 
-```powershell
-cd ../..
-node server.js
-```
+The root `render.yaml` defines the public static site. Connect the GitHub repository to Render and sync the Blueprint:
 
-Open [http://127.0.0.1:4173](http://127.0.0.1:4173).
+1. Render reads `render.yaml` from the `main` branch.
+2. The service uses `shivUIdes/MANASIKA Wellness Platform (UI)` as its root directory.
+3. Render runs `npm ci && npm run build` and publishes `dist`.
+4. Pushes to `main` deploy automatically after the Blueprint is first approved.
 
-### Development pipeline
+The service is a static website; it needs no server process or port binding. The built site is served from Render’s public site URL.
 
-For live UI development, run Vite from the React project folder instead of building first:
+## Features and data boundaries
 
-```powershell
-cd "shivUIdes/MANASIKA Wellness Platform (UI)"
-npm ci
-npm run dev -- --host 127.0.0.1 --port 4173
-```
-
-Vite serves the app at [http://127.0.0.1:4173](http://127.0.0.1:4173) and refreshes the page as source files change. Stop it with `Ctrl+C`.
-
-### Production build pipeline
-
-1. `npm ci` installs the exact dependency versions in `package-lock.json`.
-2. `npm run build` creates the optimized static website in the React project’s `dist` directory.
-3. `node server.js` serves that build and provides the optional local model endpoints.
-
-## Docker pipeline
-
-Build the image from the workspace root so Docker can access the React project and server files:
-
-```powershell
-docker build -t manasika .
-docker run --rm -p 127.0.0.1:4173:4173 manasika
-```
-
-The Dockerfile installs dependencies and builds the React app in a build stage, then copies the static output and Node server into a smaller runtime image. Open [http://127.0.0.1:4173](http://127.0.0.1:4173) while the container is running. Stop it with `Ctrl+C`.
-
-## Optional local model
-
-The Node server can forward chat requests to a locally running Ollama model. Set `MANISIKA_OLLAMA_URL` and `MANISIKA_OLLAMA_MODEL` in the server environment before starting `node server.js`. The optional `/api/status` and `/api/chat` endpoints are served by the same process. The container listens on port `4173`; configure model variables when launching it if the model is available to the container.
+The prototype includes onboarding preferences, mood check-ins, reflection entries, locally saved community drafts and group choices, an activity summary, export, and local data deletion. These are stored in the current browser using local storage. Community content is not transmitted or visible to other users, and user data does not sync across devices. Companion replies are prototype guidance, not a connected or fine-tuned model. No diagnostic or clinical claims are made.
 
 ## Project layout
 
-- `shivUIdes/MANASIKA Wellness Platform (UI)/` — React, Vite, and Tailwind application source
-- `server.js` — static website server and optional local model endpoints
-- `Dockerfile` — multi-stage container build and runtime
-- `.dockerignore` — files excluded from the container build context
+- `shivUIdes/MANASIKA Wellness Platform (UI)/` — React and Vite application source
+- `render.yaml` — Render static site configuration
