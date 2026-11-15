@@ -50,6 +50,10 @@ The provided zodiac prompt/response dataset is served from `shivUIdes/manasika-u
 
 This repository deploys a static Figma UI and has no server backend or model-training pipeline. The dataset is used for runtime retrieval; it does not fine-tune model weights. The IndexedDB copy stays in the current browser/device and is not shared between users.
 
+## AI Companion data
+
+The supplied mental health support chat file is copied to `shivUIdes/manasika-ui/public/data/mental_health_support_chat.json`. On first use, the Companion validates and stores usable prompt/response pairs in the browser's versioned `manasika-ai-companion-memory` IndexedDB database, then retrieves a locally matched response. User messages are not written to that database. Urgent-risk messages and requests for diagnosis or medication guidance use fixed safety responses before dataset retrieval. This retrieval-based prototype does not train or fine-tune an AI model; the current Render service has no server-side database or model endpoint.
+
 ## Feature and data boundaries
 
 The app includes psychology topics, private reflections, mood check-ins and history, growth goals, guided exercises, student planning, and playful astrology reflections. Profile preferences, check-ins, reflections, goals, and activity are stored in the current browser. Community posts are local drafts and are not sent to other users or synced across devices. Companion replies are prototype guidance, not a connected or fine-tuned model. Cosmic Corner is entertainment and not prediction or life advice.

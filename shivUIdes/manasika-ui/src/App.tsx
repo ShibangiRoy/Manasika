@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import manasikaLogo from "./assets/manasika-logo.webp";
 import { getDatasetReflection } from "./cosmicDataset";
+import { getCompanionDatasetReply } from "./companionDataset";
 
 type Page =
   | "home"
@@ -2367,24 +2368,29 @@ function Cosmic() {
 }
 
 function Companion({ setPage, profile, latestMood }: { setPage: (p: Page) => void; profile: UserProfile; latestMood: number | null }) {
-  const [messages, setMessages] = useState<{ from: "ai" | "user"; text: string }[]>([
+  const [messages, setMessages] = useState<{ id: string; from: "ai" | "user"; text: string }[]>([
     {
+      id: "welcome",
       from: "ai",
       text: `Hi${profile.name ? ` ${profile.name}` : ""}. I’m here to help you think things through—not to judge or diagnose. What feels most present today?`,
     },
   ]);
   const [text, setText] = useState("");
-  const send = (value = text) => {
-    if (!value.trim()) return;
-    setMessages((m) => [
-      ...m,
-      { from: "user", text: value },
-      {
-        from: "ai",
-        text: latestMood !== null && latestMood >= 3 ? "That sounds heavy. We can take this one small moment at a time. Would you prefer a grounding exercise or a gentle reflection prompt?" : "Thank you for sharing that. Would it help to explore a small next step, or would you rather pause with a calming exercise?",
-      },
+  const send = async (value = text) => {
+    const message = value.trim();
+    if (!message) return;
+    const replyId = crypto.randomUUID();
+    setMessages((items) => [
+      ...items,
+      { id: crypto.randomUUID(), from: "user", text: message },
+      { id: replyId, from: "ai", text: "Let me think this through with care…" },
     ]);
     setText("");
+    const fallback = latestMood !== null && latestMood >= 3
+      ? "That sounds heavy. We can take this one small moment at a time. Would you prefer a grounding exercise or a gentle reflection prompt?"
+      : "Thank you for sharing that. Would it help to explore a small next step, or would you rather pause with a calming exercise?";
+    const reply = await getCompanionDatasetReply(message).catch(() => null);
+    setMessages((items) => items.map((item) => item.id === replyId ? { ...item, text: reply || fallback } : item));
   };
   return (
     <div className="page companion-page">
@@ -2402,7 +2408,7 @@ function Companion({ setPage, profile, latestMood }: { setPage: (p: Page) => voi
         <section className="chat-panel">
           <div className="chat-messages">
             {messages.map((m, i) => (
-              <div key={i} className={`message ${m.from}`}>
+              <div key={m.id || i} className={`message ${m.from}`}>
                 <span>{m.from === "ai" ? <Icon name="spark" /> : "A"}</span>
                 <p>{m.text}</p>
               </div>
