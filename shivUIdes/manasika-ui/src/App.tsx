@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import manasikaLogo from "./assets/manasika-logo.webp";
+import { getDatasetReflection } from "./cosmicDataset";
 
 type Page =
   | "home"
@@ -2242,9 +2243,19 @@ function Cosmic() {
   const [otherSign, setOtherSign] = useState<ZodiacSign>("Aries");
   const [compatibilityOpen, setCompatibilityOpen] = useState(false);
   const [celebration, setCelebration] = useState(false);
+  const [datasetReflection, setDatasetReflection] = useState<string | null>(null);
   const signInfo = zodiacInfo[sign];
   const dayNumber = Math.floor(new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime() / 86_400_000);
-  const dailyMessage = signInfo.messages[(dayNumber + zodiacSigns.indexOf(sign)) % signInfo.messages.length];
+  const localDay = localDateKey(now);
+  const dailyMessage = datasetReflection || signInfo.messages[(dayNumber + zodiacSigns.indexOf(sign)) % signInfo.messages.length];
+  useEffect(() => {
+    let active = true;
+    setDatasetReflection(null);
+    getDatasetReflection(sign, localDay).then((reflection) => {
+      if (active) setDatasetReflection(reflection);
+    });
+    return () => { active = false; };
+  }, [sign, localDay]);
   const affirmation = `I can move at my own pace; ${signInfo.traits[0].toLowerCase()} can begin with one small choice.`;
   const birthdayToday = !!birthDate && birthDate.slice(5) === localDateKey(now).slice(5);
   const compatibilityText = zodiacInfo[otherSign].element === signInfo.element

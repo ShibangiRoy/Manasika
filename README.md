@@ -44,6 +44,12 @@ Render configuration: root directory `shivUIdes/manasika-ui`, build command `npm
 
 The interface reads the visitor’s device clock and local timezone. Date and time displays refresh every 30 seconds and when the tab regains focus. Mood check-ins use the visitor’s local calendar date. No GPS permission or external time service is required, so this works across locations without collecting location data.
 
+## Cosmic Corner data
+
+The provided zodiac prompt/response dataset is served from `shivUIdes/manasika-ui/public/data/western_zodiac_signs.json`. Cosmic Corner validates and loads its 500 records on first use, stores a versioned copy in the browser's `manasika-cosmic-corner` IndexedDB database, and retrieves a sign-matched response using the visitor's local date. Built-in reflections remain available if browser storage or the dataset request is unavailable.
+
+This repository deploys a static Figma UI and has no server backend or model-training pipeline. The dataset is used for runtime retrieval; it does not fine-tune model weights. The IndexedDB copy stays in the current browser/device and is not shared between users.
+
 ## Feature and data boundaries
 
 The app includes psychology topics, private reflections, mood check-ins and history, growth goals, guided exercises, student planning, and playful astrology reflections. Profile preferences, check-ins, reflections, goals, and activity are stored in the current browser. Community posts are local drafts and are not sent to other users or synced across devices. Companion replies are prototype guidance, not a connected or fine-tuned model. Cosmic Corner is entertainment and not prediction or life advice.
