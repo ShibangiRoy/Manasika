@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import manasikaLogo from "./assets/manasika-logo.webp";
 import { getDatasetReflection } from "./cosmicDataset";
 import { getCompanionDatasetReply } from "./companionDataset";
+import { getCreativePrompt, saveCreativeOutput } from "./creativeDataset";
 
 type Page =
   | "home"
@@ -2091,6 +2092,66 @@ function Creative() {
   ];
   const [artPromptIndex, setArtPromptIndex] = useState(0);
   const [artPrompt, setArtPrompt] = useState(artPrompts[0]);
+  const [musicPrompt, setMusicPrompt] = useState("");
+  const [musicNote, setMusicNote] = useState("");
+  const [storyPrompt, setStoryPrompt] = useState("Write about the version of you who kept going.");
+  const [artworkFile, setArtworkFile] = useState<File | null>(null);
+  const [audioFile, setAudioFile] = useState<File | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    Promise.all([
+      getCreativePrompt("image", 0),
+      getCreativePrompt("music", 0),
+      getCreativePrompt("story", 0),
+    ]).then(([image, music, writing]) => {
+      if (!active) return;
+      if (image) setArtPrompt(image);
+      if (music) {
+        setMusicPrompt(music);
+        setMusicNote((current) => current || music);
+      }
+      if (writing) setStoryPrompt(writing);
+    });
+    return () => { active = false; };
+  }, []);
+
+  const createNextArtPrompt = () => {
+    const nextIndex = artPromptIndex + 1;
+    setArtPromptIndex(nextIndex);
+    setSaved(false);
+    getCreativePrompt("image", nextIndex).then((prompt) => {
+      if (prompt) setArtPrompt(prompt);
+      else setArtPrompt(artPrompts[nextIndex % artPrompts.length]);
+    });
+  };
+
+  const saveArtwork = async () => {
+    const didSave = await saveCreativeOutput({
+      kind: "image",
+      prompt: artPrompt,
+      content: "",
+      ...(artworkFile ? { file: artworkFile, fileName: artworkFile.name, mimeType: artworkFile.type } : {}),
+    });
+    setSaved(didSave);
+  };
+
+  const saveMusicNote = async () => {
+    if (!musicNote.trim()) return;
+    const didSave = await saveCreativeOutput({
+      kind: "music",
+      prompt: musicPrompt || musicNote,
+      content: musicNote,
+      ...(audioFile ? { file: audioFile, fileName: audioFile.name, mimeType: audioFile.type } : {}),
+    });
+    setSaved(didSave);
+    window.alert(didSave ? "Your music note was saved privately." : "This browser could not save the music note.");
+  };
+
+  const saveStory = async () => {
+    if (!story.trim()) return;
+    setSaved(await saveCreativeOutput({ kind: "story", prompt: storyPrompt, content: story }));
+  };
   return (
     <div className="page">
       <PageHeader
@@ -2106,7 +2167,7 @@ function Creative() {
       />
       <div className="creative-tabs">
         {["My Art", "My Music", "My Stories"].map((t) => (
-          <button className={tab === t ? "active" : ""} onClick={() => setTab(t)} key={t}>
+          <button className={tab === t ? "active" : ""} onClick={() => { setTab(t); setSaved(false); }} key={t}>
             {t === "My Art" ? (
               <Icon name="palette" />
             ) : t === "My Music" ? (
@@ -2131,10 +2192,10 @@ function Creative() {
             </div>
             <div className="creation-actions">
               <label className="upload-btn">
-                <input type="file" accept="image/*" />
+                <input type="file" accept="image/*" onChange={(event) => setArtworkFile(event.target.files?.[0] ?? null)} />
                 <Icon name="plus" /> Upload artwork
               </label>
-              <Button onClick={() => setSaved(true)}>Save to gallery</Button>
+              <Button onClick={saveArtwork}>Save to gallery</Button>
             </div>
             {saved && (
               <span className="saved">
@@ -2151,7 +2212,7 @@ function Creative() {
               <textarea
                 aria-label="Creative prompt for your next artwork"
                 value={artPrompt}
-                onChange={(event) => setArtPrompt(event.target.value)}
+                onChange={(event) => { setArtPrompt(event.target.value); setSaved(false); }}
                 rows={4}
               />
             </label>
@@ -2160,11 +2221,7 @@ function Creative() {
             </p>
             <Button
               variant="secondary"
-              onClick={() => {
-                const nextIndex = (artPromptIndex + 1) % artPrompts.length;
-                setArtPromptIndex(nextIndex);
-                setArtPrompt(artPrompts[nextIndex]);
-              }}
+              onClick={createNextArtPrompt}
             >
               New prompt
             </Button>
@@ -2189,16 +2246,20 @@ function Creative() {
               Start recording
             </Button>
             <label className="upload-btn">
-              <input type="file" accept="audio/*" />
+              <input type="file" accept="audio/*" onChange={(event) => setAudioFile(event.target.files?.[0] ?? null)} />
               <Icon name="plus" /> Upload original audio
             </label>
           </section>
           <aside className="creative-prompt">
             <Kicker>Lyrics & ideas</Kicker>
-            <textarea placeholder="A line, a rhythm, a feeling..." />
+            <textarea
+              value={musicNote}
+              onChange={(event) => { setMusicNote(event.target.value); setSaved(false); }}
+              placeholder={musicPrompt || "A line, a rhythm, a feeling..."}
+            />
             <Button
               variant="secondary"
-              onClick={() => window.alert("Your music note was saved privately.")}
+              onClick={saveMusicNote}
             >
               Save note
             </Button>
@@ -2219,7 +2280,7 @@ function Creative() {
             />
             <div>
               <span>{story.split(/\s+/).filter(Boolean).length} words</span>
-              <Button onClick={() => setSaved(true)} disabled={!story.trim()}>
+              <Button onClick={saveStory} disabled={!story.trim()}>
                 {saved ? "Saved privately" : "Save story"}
               </Button>
             </div>
@@ -2227,7 +2288,7 @@ function Creative() {
           <aside className="creative-prompt">
             <Icon name="journal" />
             <small>WRITING PROMPT</small>
-            <h2>Write about the version of you who kept going.</h2>
+            <h2>{storyPrompt}</h2>
             <p>Fiction, memory, fragments—any form is welcome.</p>
           </aside>
         </div>

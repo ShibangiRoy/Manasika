@@ -54,6 +54,10 @@ This repository deploys a static Figma UI and has no server backend or model-tra
 
 The supplied mental health support chat file is copied to `shivUIdes/manasika-ui/public/data/mental_health_support_chat.json`. On first use, the Companion validates and stores usable prompt/response pairs in the browser's versioned `manasika-ai-companion-memory` IndexedDB database, then retrieves a locally matched response. User messages are not written to that database. Urgent-risk messages and requests for diagnosis or medication guidance use fixed safety responses before dataset retrieval. This retrieval-based prototype does not train or fine-tune an AI model; the current Render service has no server-side database or model endpoint.
 
+## Creative Space data
+
+The supplied media-generation prompt dataset is served from `shivUIdes/manasika-ui/public/data/ai_media_generation_prompts.json`. Creative Space validates and stores the source records plus curated image, music, and story prompts in the browser's versioned `manasika-creative-space-memory` IndexedDB database. Saved text and optional uploaded media files are stored locally in that database. No user media is sent to a remote service. The current prototype has no image, audio, or text generation provider, so it prepares dataset-backed prompts and saves creative output locally; it does not train a generative model.
+
 ## Feature and data boundaries
 
 The app includes psychology topics, private reflections, mood check-ins and history, growth goals, guided exercises, student planning, and playful astrology reflections. Profile preferences, check-ins, reflections, goals, and activity are stored in the current browser. Community posts are local drafts and are not sent to other users or synced across devices. Companion replies are prototype guidance, not a connected or fine-tuned model. Cosmic Corner is entertainment and not prediction or life advice.
