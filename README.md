@@ -5,7 +5,7 @@ Manasika is a student wellness prototype built from the Figma-exported React app
 ## URLs
 
 - **Local development:** [http://localhost:4173](http://localhost:4173) after starting Vite with the command below.
-- **Expected Render URL:** [https://manasika-wellness.onrender.com](https://manasika-wellness.onrender.com) — checked 15 Nov 2026; currently returns Render `404 no-server`, so there is no verified live public site yet.
+- **Public site (Render):** [https://manasika-wellness.onrender.com](https://manasika-wellness.onrender.com) — live and returning HTTP 200 (verified 15 Nov 2026). The JavaScript and CSS assets also return HTTP 200.
 
 ## Requirements
 
