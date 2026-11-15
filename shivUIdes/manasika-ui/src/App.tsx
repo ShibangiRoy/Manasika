@@ -70,6 +70,7 @@ type CommunityPost = {
 };
 
 type ActivityItem = { id: string; date: string; action: string; area: string };
+type ReflectionEntry = { id: number; date: string; localDay?: string; title: string; text: string; mood?: number | null };
 
 const defaultProfile: UserProfile = {
   name: "",
@@ -99,8 +100,33 @@ function useSavedState<T>(key: string, initial: T) {
 }
 
 function todayKey() {
-  const date = new Date();
+  return localDateKey(new Date());
+}
+
+function localDateKey(date: Date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
+function useCurrentTime() {
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const refresh = () => setNow(new Date());
+    const timer = window.setInterval(refresh, 30_000);
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refresh);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", refresh);
+    };
+  }, []);
+  return now;
+}
+
+function formatLocalDate(value: string | Date, options: Intl.DateTimeFormatOptions = { dateStyle: "medium" }) {
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return value.toString();
+  return options.timeStyle || options.hour ? date.toLocaleString(undefined, options) : date.toLocaleDateString(undefined, options);
 }
 
 function recordActivity(setActivity: React.Dispatch<React.SetStateAction<ActivityItem[]>>, action: string, area: string) {
@@ -402,23 +428,43 @@ const communityGroups = [
   { id: "friendship", name: "Friendship & Boundaries", text: "Talk through connection, confidence, and limits.", tags: ["Friends", "Relationships", "Confidence & overthinking"], icon: "heart" as IconName },
 ];
 
-const calendarMoods: Record<number, number> = {
-  2: 1,
-  4: 2,
-  5: 1,
-  7: 3,
-  8: 2,
-  11: 0,
-  12: 1,
-  14: 4,
-  15: 3,
-  18: 2,
-  19: 1,
-  20: 1,
-  22: 2,
-  24: 0,
-  26: 1,
+const zodiacSigns = ["Aries", "Taurus", "Gemini", "Cancer", "Leo", "Virgo", "Libra", "Scorpio", "Sagittarius", "Capricorn", "Aquarius", "Pisces"] as const;
+type ZodiacSign = (typeof zodiacSigns)[number];
+const zodiacInfo: Record<ZodiacSign, { symbol: string; element: string; traits: [string, string, string]; archetype: string; messages: [string, string, string] }> = {
+  Aries: { symbol: "♈", element: "Fire", traits: ["Courage", "Initiative", "Honesty"], archetype: "Courage, initiative & fresh starts", messages: ["You can begin again without having every answer.", "Let your energy serve what matters to you today.", "A small brave step is still a meaningful step."] },
+  Taurus: { symbol: "♉", element: "Earth", traits: ["Steadiness", "Patience", "Senses"], archetype: "Steadiness, patience & the senses", messages: ["There is strength in choosing a pace you can sustain.", "Let one comforting ordinary thing be enough for now.", "You are allowed to build slowly and steadily."] },
+  Gemini: { symbol: "♊", element: "Air", traits: ["Curiosity", "Ideas", "Connection"], archetype: "Curiosity, ideas & connection", messages: ["Curiosity can open a door without requiring a decision.", "You may hold more than one thought while you work things out.", "A thoughtful conversation can start with one honest question."] },
+  Cancer: { symbol: "♋", element: "Water", traits: ["Care", "Memory", "Belonging"], archetype: "Care, memory & belonging", messages: ["Care for yourself with the same gentleness you offer others.", "It is okay to make room for a feeling before acting on it.", "Belonging can include being fully yourself."] },
+  Leo: { symbol: "♌", element: "Fire", traits: ["Warmth", "Expression", "Generosity"], archetype: "Warmth, expression & generosity", messages: ["Your presence matters even when you are not performing.", "Let yourself enjoy a small thing without earning it.", "Sharing your creativity can begin privately, just for you."] },
+  Virgo: { symbol: "♍", element: "Earth", traits: ["Care", "Craft", "Attention"], archetype: "Care, craft & thoughtful attention", messages: ["Progress does not require perfect conditions.", "Choose one manageable thing and let the rest wait.", "Your worth is larger than what you complete today."] },
+  Libra: { symbol: "♎", element: "Air", traits: ["Balance", "Beauty", "Perspective"], archetype: "Balance, creativity & thoughtful connection", messages: ["Your voice and your pace both deserve respect.", "You can care about harmony while still naming what you need.", "A balanced choice can include your own wellbeing."] },
+  Scorpio: { symbol: "♏", element: "Water", traits: ["Depth", "Privacy", "Resolve"], archetype: "Depth, privacy & quiet resolve", messages: ["You can share only what feels safe to share.", "A quiet boundary is still a boundary.", "Change can happen privately, one choice at a time."] },
+  Sagittarius: { symbol: "♐", element: "Fire", traits: ["Wonder", "Learning", "Possibility"], archetype: "Wonder, learning & possibility", messages: ["You can explore a possibility without committing to it yet.", "Learning something new is progress even when it is small.", "Let hope be gentle rather than demanding."] },
+  Capricorn: { symbol: "♑", element: "Earth", traits: ["Commitment", "Practice", "Structure"], archetype: "Commitment, practice & steady structure", messages: ["Rest can be part of a sustainable plan.", "You do not have to carry every responsibility alone.", "One kind step counts, even if it is not the whole plan."] },
+  Aquarius: { symbol: "♒", element: "Air", traits: ["Originality", "Ideas", "Community"], archetype: "Originality, ideas & community", messages: ["Your different perspective is welcome here.", "Connection can begin with shared curiosity.", "You can make space for belonging and individuality."] },
+  Pisces: { symbol: "♓", element: "Water", traits: ["Imagination", "Sensitivity", "Compassion"], archetype: "Imagination, sensitivity & compassion", messages: ["Your imagination can be a gentle place to rest.", "Sensitivity is information; you choose what to do with it.", "Offer yourself compassion before asking for certainty."] },
 };
+
+function zodiacFromBirthDate(value: string): ZodiacSign | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!match) return null;
+  const [, y, m, d] = match;
+  const date = new Date(Number(y), Number(m) - 1, Number(d));
+  if (date.getFullYear() !== Number(y) || date.getMonth() !== Number(m) - 1 || date.getDate() !== Number(d) || date > new Date()) return null;
+  const monthDay = Number(m) * 100 + Number(d);
+  if (monthDay >= 321 && monthDay <= 419) return "Aries";
+  if (monthDay >= 420 && monthDay <= 520) return "Taurus";
+  if (monthDay >= 521 && monthDay <= 620) return "Gemini";
+  if (monthDay >= 621 && monthDay <= 722) return "Cancer";
+  if (monthDay >= 723 && monthDay <= 822) return "Leo";
+  if (monthDay >= 823 && monthDay <= 922) return "Virgo";
+  if (monthDay >= 923 && monthDay <= 1022) return "Libra";
+  if (monthDay >= 1023 && monthDay <= 1121) return "Scorpio";
+  if (monthDay >= 1122 && monthDay <= 1221) return "Sagittarius";
+  if (monthDay >= 1222 || monthDay <= 119) return "Capricorn";
+  if (monthDay <= 218) return "Aquarius";
+  return "Pisces";
+}
 
 function Logo({ onClick }: { onClick: () => void }) {
   return (
@@ -879,19 +925,24 @@ function Dashboard({
   mood,
   setMood,
   profile,
+  checkIns,
 }: {
   setPage: (p: Page) => void;
   mood: number | null;
   setMood: (n: number) => void;
   profile: UserProfile;
+  checkIns: MoodCheckIn[];
 }) {
+  const now = useCurrentTime();
+  const [reflections] = useSavedState<ReflectionEntry[]>("manasika.reflections.v1", []);
+  const [cosmicSign] = useSavedState<ZodiacSign>("manasika.cosmic.sign.v1", "Libra");
   const [saved, setSaved] = useState(false);
   const lowMood = mood !== null && mood >= 3;
   const kindChoice = profile.likes.includes("Art") ? "creative" : profile.likes.includes("Writing") ? "reflective" : "gentle";
   return (
     <div className="page dashboard-page">
       <PageHeader
-        eyebrow={new Date().toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" })}
+        eyebrow={`${now.toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" })} · ${now.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit", timeZoneName: "short" })}`}
         title={`Welcome${profile.name ? ` back, ${profile.name}` : " to your space"}.`}
         text={lowMood ? "Let’s make today a little gentler, one small step at a time." : mood !== null ? "You checked in today. Keep what feels good close, and take the next moment as it comes." : "How are you feeling today? There is no right answer."}
         action={
@@ -1009,9 +1060,9 @@ function Dashboard({
           <button className="cosmic-widget" onClick={() => setPage("cosmic")}>
             <span className="stars">✦ · ˚ ✧</span>
             <small>TODAY’S COSMIC MESSAGE</small>
-            <div className="zodiac">♎</div>
-            <h3>Make room for your own voice.</h3>
-            <p>Your ideas deserve to be heard—even before they feel perfect.</p>
+            <div className="zodiac">{zodiacInfo[cosmicSign].symbol}</div>
+            <h3>{zodiacInfo[cosmicSign].messages[Math.floor(new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime() / 86_400_000) % 3]}</h3>
+            <p>For {cosmicSign} · reflective and just for fun.</p>
             <span>
               Explore Cosmic Corner <Icon name="arrow" />
             </span>
@@ -1032,16 +1083,17 @@ function Dashboard({
           <button className="growth-widget" onClick={() => setPage("growth")}>
             <div>
               <small>YOUR GROWTH</small>
-              <h3>4 small moments this week</h3>
+              <h3>{checkIns.filter((item) => new Date(`${item.date}T00:00:00`).getTime() >= now.getTime() - 7 * 24 * 60 * 60 * 1000).length + reflections.filter((item) => new Date(item.date).getTime() >= now.getTime() - 7 * 24 * 60 * 60 * 1000).length} small moments this week</h3>
             </div>
             <div className="week-dots">
-              {["M", "T", "W", "T", "F", "S", "S"].map((d, i) => (
-                <span key={i} className={i < 4 ? "filled" : ""}>
-                  {d}
-                </span>
-              ))}
+              {Array.from({ length: 7 }, (_, i) => {
+                const day = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6 + i);
+                const dayKey = localDateKey(day);
+                const active = checkIns.some((item) => item.date === dayKey) || reflections.some((item) => (item.localDay || (Number.isNaN(new Date(item.date).getTime()) ? "" : localDateKey(new Date(item.date)))) === dayKey);
+                return <span key={dayKey} className={active ? "filled" : ""} title={day.toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" })}>{day.toLocaleDateString(undefined, { weekday: "short" }).slice(0, 1)}</span>;
+              })}
             </div>
-            <p>You took time to understand yourself. That matters.</p>
+            <p>Your check-ins and reflections shape this private view. No streaks or scores.</p>
           </button>
         </aside>
       </div>
@@ -1056,7 +1108,7 @@ function Discover({ setPage }: { setPage: (p: Page) => void }) {
   const shown = topics.filter(
     (t) =>
       (category === "All topics" || t.category === category) &&
-      t.title.toLowerCase().includes(search.toLowerCase()),
+      `${t.title} ${t.text} ${t.category}`.toLowerCase().includes(search.trim().toLowerCase()),
   );
   if (article)
     return (
@@ -1180,15 +1232,31 @@ function Discover({ setPage }: { setPage: (p: Page) => void }) {
   );
 }
 
-function Reflection({ onActivity }: { onActivity: () => void }) {
+function Reflection({ onActivity, checkIns, setPage }: { onActivity: () => void; checkIns: MoodCheckIn[]; setPage: (page: Page) => void }) {
+  const now = useCurrentTime();
   const [entry, setEntry] = useState("");
+  const [title, setTitle] = useState("");
+  const [promptIndex, setPromptIndex] = useState(0);
+  const reflectionPrompts = [
+    "What are you carrying today that you don’t need to carry alone?",
+    "What made you feel a little more like yourself today?",
+    "What is one kind thing you can offer yourself next?",
+    "What would you like to remember from this moment?",
+  ];
   const [selectedMood, setSelectedMood] = useState<number | null>(null);
-  const [savedEntries, setSavedEntries] = useSavedState<{id:number;date:string;title:string;text:string}[]>("manasika.reflections.v1", []);
+  const [savedEntries, setSavedEntries] = useSavedState<ReflectionEntry[]>("manasika.reflections.v1", []);
   const [saved, setSaved] = useState(false);
+  const year = now.getFullYear();
+  const month = now.getMonth();
+  const monthLabel = now.toLocaleDateString(undefined, { month: "long", year: "numeric" });
+  const firstWeekday = (new Date(year, month, 1).getDay() + 6) % 7;
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const reflectionDays = new Set(savedEntries.map((item) => item.localDay || (Number.isNaN(new Date(item.date).getTime()) ? "" : localDateKey(new Date(item.date)))).filter(Boolean));
+  const checkedMoodDays = new Set(checkIns.map((item) => item.date));
   const save = () => {
     if (!entry.trim()) return;
     setSavedEntries([
-      { id: Date.now(), date: "Today, 8:42 PM", title: "Today’s reflection", text: entry },
+      { id: Date.now(), date: new Date().toISOString(), localDay: todayKey(), mood: selectedMood, title: title.trim() || `Reflection · ${formatLocalDate(new Date())}`, text: entry },
       ...savedEntries,
     ]);
     onActivity();
@@ -1215,13 +1283,13 @@ function Reflection({ onActivity }: { onActivity: () => void }) {
             </span>
             <div>
               <small>TODAY’S PROMPT</small>
-              <h2>What are you carrying today that you don’t need to carry alone?</h2>
+              <h2>{reflectionPrompts[promptIndex]}</h2>
             </div>
-            <button onClick={() => setEntry("What made me smile today?\\n\\n")}>New prompt</button>
+            <button onClick={() => setPromptIndex((index) => (index + 1) % reflectionPrompts.length)}>New prompt</button>
           </div>
           <label className="journal-editor">
-            <span>September 24 · Tuesday</span>
-            <input placeholder="Give this moment a title..." />
+            <span>{now.toLocaleDateString(undefined, { weekday: "long", year: "numeric", month: "long", day: "numeric" })}</span>
+            <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Give this moment a title..." />
             <textarea
               value={entry}
               onChange={(e) => {
@@ -1251,23 +1319,28 @@ function Reflection({ onActivity }: { onActivity: () => void }) {
         <aside className="entry-side">
           <div className="mini-calendar">
             <div>
-              <h3>September 2025</h3>
-              <button>View all</button>
+              <h3>{monthLabel}</h3>
+              <button onClick={() => setPage("mood")}>View mood</button>
             </div>
             <div className="calendar-mini-grid">
               {["M", "T", "W", "T", "F", "S", "S"].map((d, i) => (
                 <b key={i}>{d}</b>
               ))}
-              {Array.from({ length: 28 }, (_, i) => (
+              {Array.from({ length: firstWeekday }, (_, i) => <span key={`blank-${i}`} />)}
+              {Array.from({ length: daysInMonth }, (_, i) => {
+                const day = i + 1;
+                const dateKey = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+                const hasMood = checkedMoodDays.has(dateKey);
+                const hasReflection = reflectionDays.has(dateKey);
+                return (
                 <span
-                  key={i}
-                  className={
-                    calendarMoods[i + 1] !== undefined ? `dot-tone-${calendarMoods[i + 1]}` : ""
-                  }
+                  key={day}
+                  className={hasMood ? `dot-tone-${checkIns.find((item) => item.date === dateKey)!.mood}` : hasReflection ? "dot-tone-1" : ""}
                 >
-                  {i + 1}
+                  {day}
                 </span>
-              ))}
+                );
+              })}
             </div>
           </div>
           <div className="previous-entries">
@@ -1277,11 +1350,11 @@ function Reflection({ onActivity }: { onActivity: () => void }) {
             </div>
             {savedEntries.map((e) => (
               <article key={e.id}>
-                <small>{e.date}</small>
+                <small>{formatLocalDate(e.date, { dateStyle: "medium", timeStyle: "short" })}</small>
                 <h4>{e.title}</h4>
                 <p>{e.text}</p>
                 <div>
-                  <button onClick={() => setEntry(e.text)}>
+                  <button onClick={() => { setEntry(e.text); setTitle(e.title); setSaved(false); }}>
                     <Icon name="edit" /> Edit
                   </button>
                   <button onClick={() => setSavedEntries((s) => s.filter((v) => v.id !== e.id))}>
@@ -1585,18 +1658,25 @@ function Scenario() {
 function Peace() {
   const [exercise, setExercise] = useState<"breathing" | "grounding" | "mindfulness">("breathing");
   const [running, setRunning] = useState(false);
-  const [soundOn, setSoundOn] = useState(false);
+  const [duration, setDuration] = useState(3);
+  const [elapsed, setElapsed] = useState(0);
   const [phase, setPhase] = useState("Breathe in");
   const [groundStep, setGroundStep] = useState(0);
   useEffect(() => {
     if (!running) return;
     const phases = ["Breathe in", "Hold gently", "Breathe out", "Rest"];
-    const id = window.setInterval(
-      () => setPhase((p) => phases[(phases.indexOf(p) + 1) % phases.length]),
-      4000,
-    );
-    return () => clearInterval(id);
-  }, [running]);
+    if (elapsed >= duration * 60) {
+      setRunning(false);
+      setPhase("Rest");
+      return;
+    }
+    const id = window.setTimeout(() => {
+      const nextSecond = elapsed + 1;
+      setElapsed(nextSecond);
+      if (nextSecond % 4 === 0) setPhase(phases[Math.floor(nextSecond / 4) % phases.length]);
+    }, 1000);
+    return () => clearTimeout(id);
+  }, [running, elapsed, duration]);
   return (
     <div className="page peace-page">
       <PageHeader
@@ -1604,19 +1684,19 @@ function Peace() {
         title="Peace Corner"
         text="Nothing to achieve. Choose a small practice and let this moment be enough."
         action={
-          <button className="sound-control" onClick={() => setSoundOn(!soundOn)}>
-            <Icon name="play" /> Sound {soundOn ? "on" : "off"}
+          <button className="sound-control" type="button" disabled title="Audio tracks are not included in this prototype">
+            <Icon name="play" /> Audio unavailable
           </button>
         }
       />
       <div className="peace-tabs">
-        <Tag active={exercise === "breathing"} onClick={() => setExercise("breathing")}>
+        <Tag active={exercise === "breathing"} onClick={() => { setExercise("breathing"); setRunning(false); setElapsed(0); }}>
           Guided breathing
         </Tag>
-        <Tag active={exercise === "grounding"} onClick={() => setExercise("grounding")}>
+        <Tag active={exercise === "grounding"} onClick={() => { setExercise("grounding"); setRunning(false); setElapsed(0); }}>
           5–4–3–2–1 grounding
         </Tag>
-        <Tag active={exercise === "mindfulness"} onClick={() => setExercise("mindfulness")}>
+        <Tag active={exercise === "mindfulness"} onClick={() => { setExercise("mindfulness"); setRunning(false); setElapsed(0); }}>
           Mindfulness
         </Tag>
       </div>
@@ -1627,11 +1707,11 @@ function Peace() {
               <span>
                 <i />
                 <b>{phase}</b>
-                <small>4 seconds</small>
+                <small>{`${Math.floor(elapsed / 60)}:${String(elapsed % 60).padStart(2, "0")} elapsed`}</small>
               </span>
             </div>
             <div className="practice-copy">
-              <Kicker>3 minute reset</Kicker>
+              <Kicker>{duration} minute reset</Kicker>
               <h2>Come back to your breath.</h2>
               <p>
                 Let the circle guide you. There’s no need to force a deep breath—just follow what
@@ -1640,13 +1720,13 @@ function Peace() {
               <div className="duration-row">
                 <span>Duration</span>
                 {["1 min", "3 min", "5 min"].map((d, i) => (
-                  <Tag key={d} active={i === 1}>
+                  <Tag key={d} active={duration === [1, 3, 5][i]} onClick={() => { setDuration([1, 3, 5][i]); setElapsed(0); setRunning(false); }}>
                     {d}
                   </Tag>
                 ))}
               </div>
-              <Button onClick={() => setRunning(!running)} icon={running ? undefined : "play"}>
-                {running ? "Pause practice" : "Begin breathing"}
+              <Button onClick={() => { if (running) setRunning(false); else { if (elapsed >= duration * 60) { setElapsed(0); setPhase("Breathe in"); } setRunning(true); } }} icon={running ? undefined : "play"}>
+                {running ? "Pause practice" : elapsed >= duration * 60 ? "Begin again" : elapsed ? "Resume practice" : "Begin breathing"}
               </Button>
             </div>
           </>
@@ -1717,9 +1797,7 @@ function Peace() {
           ].map((x) => (
             <button
               key={x[1]}
-              onClick={() =>
-                window.alert(`${x[1]} is ready. Audio will remain off until you play it.`)
-              }
+              onClick={() => { const next: "breathing" | "grounding" | "mindfulness" = x[1] === "Bedtime wind-down" ? "mindfulness" : x[1] === "Supportive self-talk" ? "grounding" : "breathing"; setExercise(next); setRunning(false); document.querySelector(".practice-stage")?.scrollIntoView({ behavior: "smooth" }); }}
             >
               <span>
                 <Icon name={x[0] as IconName} />
@@ -1737,9 +1815,10 @@ function Peace() {
   );
 }
 
-function StudentLife() {
+function StudentLife({ setPage }: { setPage: (page: Page) => void }) {
+  const now = useCurrentTime();
   const [tab, setTab] = useState("Academic balance");
-  const [tasks, setTasks] = useState([
+  const [tasks, setTasks] = useSavedState("manasika.student.tasks.v1", [
     { text: "Review research notes", done: true },
     { text: "Draft two interview answers", done: false },
     { text: "Take a real lunch break", done: false },
@@ -1747,7 +1826,7 @@ function StudentLife() {
   const [newTask, setNewTask] = useState("");
   const addTask = () => {
     if (newTask.trim()) {
-      setTasks([...tasks, { text: newTask, done: false }]);
+      setTasks((items) => [...items, { text: newTask.trim(), done: false }]);
       setNewTask("");
     }
   };
@@ -1770,7 +1849,7 @@ function StudentLife() {
           <div className="planner-head">
             <div>
               <small>YOUR GENTLE PLAN</small>
-              <h2>Tuesday, one thing at a time</h2>
+              <h2>{now.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" })}, one thing at a time</h2>
             </div>
             <span>
               {tasks.filter((t) => t.done).length}/{tasks.length} complete
@@ -1782,15 +1861,13 @@ function StudentLife() {
                 <input
                   type="checkbox"
                   checked={t.done}
-                  onChange={() =>
-                    setTasks(tasks.map((x, j) => (j === i ? { ...x, done: !x.done } : x)))
-                  }
+                  onChange={() => setTasks((items) => items.map((x, j) => (j === i ? { ...x, done: !x.done } : x)))}
                 />
                 <span>
                   <Icon name="check" />
                 </span>
                 <b>{t.text}</b>
-                <button onClick={() => setTasks(tasks.filter((_, j) => j !== i))}>
+                  <button type="button" aria-label={`Remove ${t.text}`} onClick={(event) => { event.preventDefault(); event.stopPropagation(); setTasks((items) => items.filter((_, j) => j !== i)); }}>
                   <Icon name="trash" />
                 </button>
               </label>
@@ -1837,11 +1914,11 @@ function StudentLife() {
           </p>
           <div className="resource-list">
             {[
-              ["spark", "Untangle a big worry", "5 min exercise"],
-              ["journal", "Write a calmer plan", "Reflection prompt"],
-              ["heart", "Confidence before comparison", "4 min read"],
+              ["spark", "Untangle a big worry", "5 min exercise", "companion"],
+              ["journal", "Write a calmer plan", "Reflection prompt", "reflection"],
+              ["heart", "Confidence before comparison", "4 min read", "discover"],
             ].map((x) => (
-              <button key={x[1]}>
+              <button key={x[1]} onClick={() => setPage(x[3] as Page)}>
                 <Icon name={x[0] as IconName} />
                 <span>
                   <b>{x[1]}</b>
@@ -1851,7 +1928,7 @@ function StudentLife() {
               </button>
             ))}
           </div>
-          <Button onClick={() => alert("Personal goal saved for this week.")} icon="plus">
+          <Button onClick={() => setPage("growth")} icon="plus">
             Set a personal goal
           </Button>
         </aside>
@@ -1860,10 +1937,20 @@ function StudentLife() {
   );
 }
 
-function Growth() {
+function Growth({ checkIns, activity }: { checkIns: MoodCheckIn[]; activity: ActivityItem[] }) {
+  const now = useCurrentTime();
   const [goalOpen, setGoalOpen] = useState(false);
-  const [goals, setGoals] = useState(["Pause before saying yes", "End study by 10:30 PM"]);
+  const [goals, setGoals] = useSavedState("manasika.growth.goals.v1", [
+    { id: "goal-boundary", text: "Pause before saying yes", done: false },
+    { id: "goal-rest", text: "End study by 10:30 PM", done: false },
+  ]);
+  const [reflections] = useSavedState<ReflectionEntry[]>("manasika.reflections.v1", []);
   const [newGoal, setNewGoal] = useState("");
+  const weekAgo = now.getTime() - 7 * 24 * 60 * 60 * 1000;
+  const weeklyCheckIns = checkIns.filter((item) => new Date(`${item.date}T00:00:00`).getTime() >= weekAgo).length;
+  const weeklyReflections = reflections.filter((item) => new Date(item.date).getTime() >= weekAgo).length;
+  const weeklyMoments = weeklyCheckIns + weeklyReflections;
+  const areasExplored = new Set(activity.filter((item) => item.action === "Opened a section").map((item) => item.area)).size;
   return (
     <div className="page">
       <PageHeader
@@ -1882,15 +1969,12 @@ function Growth() {
             <Icon name="growth" />
           </span>
           <Kicker>This week</Kicker>
-          <h2>You took time to understand yourself.</h2>
-          <p>
-            That matters. You showed up in four small ways this week—through a reflection, a
-            check-in, learning, and rest.
-          </p>
+          <h2>{weeklyMoments ? "You took time to understand yourself." : "Your next small moment can start here."}</h2>
+          <p>{weeklyMoments ? `You saved ${weeklyMoments} moment${weeklyMoments === 1 ? "" : "s"} this week. Every one is a moment of care.` : "There is no target to meet. A check-in or reflection will appear here when you choose to save one."}</p>
         </div>
         <div className="growth-ring">
           <span>
-            <b>4</b>
+            <b>{weeklyMoments}</b>
             <small>
               moments
               <br />
@@ -1901,10 +1985,10 @@ function Growth() {
       </section>
       <div className="stats-grid">
         {[
-          ["journal", "12", "Reflections written"],
-          ["book", "7", "Topics explored"],
-          ["mood", "18", "Mood check-ins"],
-          ["spark", "3", "Boundaries practised"],
+          ["journal", String(reflections.length), "Reflections written"],
+          ["book", String(activity.filter((item) => item.area === "discover").length), "Discover visits"],
+          ["mood", String(checkIns.length), "Mood check-ins"],
+          ["spark", String(areasExplored), "Sections explored"],
         ].map((x) => (
           <article key={x[2]}>
             <Icon name={x[0] as IconName} />
@@ -1922,16 +2006,16 @@ function Growth() {
             </div>
           </div>
           <div className="goal-list">
-            {goals.map((g, i) => (
-              <article key={g}>
-                <button>
+            {goals.map((goal) => (
+              <article key={goal.id} className={goal.done ? "completed" : ""}>
+                <button aria-label={goal.done ? "Mark goal in progress" : "Complete goal"} aria-pressed={goal.done} onClick={() => setGoals((items) => items.map((item) => item.id === goal.id ? { ...item, done: !item.done } : item))}>
                   <Icon name="check" />
                 </button>
                 <div>
-                  <h3>{g}</h3>
-                  <p>{i === 0 ? "Practised 2 times this week" : "3 evenings felt more spacious"}</p>
+                  <h3>{goal.text}</h3>
+                  <p>{goal.done ? "Completed · choose your next gentle step" : "In progress · take it at your own pace"}</p>
                   <span>
-                    <i style={{ width: i === 0 ? "55%" : "72%" }} />
+                    <i style={{ width: goal.done ? "100%" : "0%" }} />
                   </span>
                 </div>
               </article>
@@ -1946,26 +2030,17 @@ function Growth() {
             </div>
           </div>
           <div className="milestone-list">
-            <article>
+            {activity.slice(0, 3).map((item) => <article key={item.id}>
               <span>
                 <Icon name="leaf" />
               </span>
               <div>
-                <small>SEPTEMBER 22</small>
-                <h3>You chose rest before burnout.</h3>
-                <p>Completed a breathing practice during exam prep.</p>
+                <small>{formatLocalDate(item.date, { dateStyle: "medium", timeStyle: "short" })}</small>
+                <h3>{item.action}</h3>
+                <p>{item.area} · recorded on this device</p>
               </div>
-            </article>
-            <article>
-              <span>
-                <Icon name="heart" />
-              </span>
-              <div>
-                <small>SEPTEMBER 18</small>
-                <h3>You listened to your own answer.</h3>
-                <p>Reflected on a boundary before responding.</p>
-              </div>
-            </article>
+            </article>)}
+            {activity.length === 0 && <p>Your saved moments will appear here.</p>}
           </div>
         </section>
       </div>
@@ -1987,7 +2062,7 @@ function Growth() {
             </Button>
             <Button
               onClick={() => {
-                if (newGoal.trim()) setGoals([...goals, newGoal]);
+                if (newGoal.trim()) setGoals((items) => [...items, { id: crypto.randomUUID(), text: newGoal.trim(), done: false }]);
                 setGoalOpen(false);
                 setNewGoal("");
               }}
@@ -2138,39 +2213,38 @@ function Creative() {
 }
 
 function Cosmic() {
-  const [sign, setSign] = useState("Libra");
-  const signs = [
-    "Aries",
-    "Taurus",
-    "Gemini",
-    "Cancer",
-    "Leo",
-    "Virgo",
-    "Libra",
-    "Scorpio",
-    "Sagittarius",
-    "Capricorn",
-    "Aquarius",
-    "Pisces",
-  ];
+  const now = useCurrentTime();
+  const [sign, setSign] = useSavedState<ZodiacSign>("manasika.cosmic.sign.v1", "Libra");
+  const [birthDate, setBirthDate] = useSavedState("manasika.cosmic.birthdate.v1", "");
+  const [savedAffirmations, setSavedAffirmations] = useSavedState<string[]>("manasika.cosmic.affirmations.v1", []);
+  const [otherSign, setOtherSign] = useState<ZodiacSign>("Aries");
+  const [compatibilityOpen, setCompatibilityOpen] = useState(false);
+  const [celebration, setCelebration] = useState(false);
+  const signInfo = zodiacInfo[sign];
+  const dayNumber = Math.floor(new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime() / 86_400_000);
+  const dailyMessage = signInfo.messages[(dayNumber + zodiacSigns.indexOf(sign)) % signInfo.messages.length];
+  const affirmation = `I can move at my own pace; ${signInfo.traits[0].toLowerCase()} can begin with one small choice.`;
+  const birthdayToday = !!birthDate && birthDate.slice(5) === localDateKey(now).slice(5);
+  const compatibilityText = zodiacInfo[otherSign].element === signInfo.element
+    ? `Both signs are traditionally associated with ${signInfo.element.toLowerCase()} energy. You might explore shared communication styles while staying curious about individual differences.`
+    : `${sign} and ${otherSign} are traditionally associated with different elements. A playful conversation can explore how different perspectives complement or challenge one another.`;
   return (
     <div className="page cosmic-page">
       <div className="cosmic-sky">
         <span className="cosmic-stars">· ✦　˚　✧　·　✦　˚　✧　·</span>
         <Kicker>Cosmic Corner</Kicker>
         <h1>A little wonder for your day.</h1>
+        <small>{now.toLocaleDateString(undefined, { weekday: "long", year: "numeric", month: "long", day: "numeric" })} · local date</small>
         <p>
           Positive astrology-inspired reflection, offered for entertainment—not as psychology,
           prediction, or life advice.
         </p>
         <div className="cosmic-message">
-          <span>♎</span>
+          <span>{signInfo.symbol}</span>
           <div>
             <small>TODAY’S MESSAGE FOR {sign.toUpperCase()}</small>
-            <h2>Your voice and your pace both deserve respect.</h2>
-            <p>
-              Today is a lovely day to notice how far you’ve come without rushing what comes next.
-            </p>
+            <h2>{dailyMessage}</h2>
+            <p>This gentle prompt changes with the selected sign and your device’s local date.</p>
           </div>
         </div>
       </div>
@@ -2184,11 +2258,15 @@ function Cosmic() {
           </p>
           <label className="field">
             <span>Your zodiac sign</span>
-            <select value={sign} onChange={(e) => setSign(e.target.value)}>
-              {signs.map((s) => (
+            <select value={sign} onChange={(e) => setSign(e.target.value as ZodiacSign)}>
+              {zodiacSigns.map((s) => (
                 <option key={s}>{s}</option>
               ))}
             </select>
+          </label>
+          <label className="field">
+            <span>Date of birth <small>Optional · stored on this device</small></span>
+            <input type="date" max={localDateKey(now)} value={birthDate} onChange={(event) => { const value = event.target.value; setBirthDate(value); const derived = zodiacFromBirthDate(value); if (derived) setSign(derived); }} />
           </label>
           <Button
             variant="cosmic"
@@ -2205,18 +2283,15 @@ function Cosmic() {
             ✦<i />✧<i />✦<i />·
           </div>
           <span className="big-zodiac">
-            {sign === "Libra" ? "♎" : sign === "Leo" ? "♌" : sign === "Cancer" ? "♋" : "✦"}
+            {signInfo.symbol}
           </span>
-          <small>{sign.toUpperCase()} · AIR</small>
-          <h2>Harmony, creativity & thoughtful connection</h2>
+          <small>{sign.toUpperCase()} · {signInfo.element.toUpperCase()}</small>
+          <h2>{signInfo.archetype}</h2>
           <p>
-            Traditionally, {sign} is associated with an appreciation for balance, beauty, and seeing
-            more than one perspective.
+            Traditionally, {sign} is associated with {signInfo.traits.map((trait) => trait.toLowerCase()).join(", ")}. This is a cultural reflection, not a personality assessment.
           </p>
           <div>
-            <Tag>Diplomatic</Tag>
-            <Tag>Creative</Tag>
-            <Tag>Compassionate</Tag>
+            {signInfo.traits.map((trait) => <Tag key={trait}>{trait}</Tag>)}
           </div>
         </div>
       </section>
@@ -2224,12 +2299,12 @@ function Cosmic() {
         <span>☾</span>
         <div>
           <small>COSMIC AFFIRMATION</small>
-          <h2>“I am growing at my own pace, and my individuality is my strength.”</h2>
+          <h2>“{affirmation}”</h2>
           <Button
             variant="secondary"
-            onClick={() => window.alert("Affirmation saved to your private collection.")}
+            onClick={() => setSavedAffirmations((items) => items.includes(affirmation) ? items.filter((item) => item !== affirmation) : [affirmation, ...items])}
           >
-            Save affirmation
+            {savedAffirmations.includes(affirmation) ? "Saved privately · remove" : "Save affirmation"}
           </Button>
         </div>
       </section>
@@ -2241,33 +2316,19 @@ function Cosmic() {
             Explore traditional communication styles and shared interests—never relationship
             outcomes.
           </p>
-          <Button
-            variant="ghost"
-            onClick={() =>
-              window.alert(
-                "Compatibility explorer opened. Readings focus only on playful communication styles.",
-              )
-            }
-          >
+          <Button variant="ghost" onClick={() => setCompatibilityOpen(true)}>
             Choose two signs
           </Button>
         </article>
         <article>
           <Icon name="spark" />
           <h3>Birthday constellation</h3>
-          <p>A positive greeting, affirmation, and reflection for your next year.</p>
-          <Button
-            variant="ghost"
-            onClick={() =>
-              window.alert(
-                `Happy birthday, ${sign}! May the year ahead make room for curiosity, rest, and your own pace.`,
-              )
-            }
-          >
-            Preview celebration
-          </Button>
+          <p>{birthdayToday ? `Happy birthday, ${sign}! May the year ahead make room for curiosity, rest, and your own pace.` : "A positive greeting, affirmation, and reflection for your next year."}</p>
+          <Button variant="ghost" onClick={() => setCelebration((shown) => !shown)}>{celebration ? "Hide celebration" : birthdayToday ? "Open birthday note" : "Preview celebration"}</Button>
+          {celebration && <p className="cosmic-celebration">Happy birthday, {sign}! May the year ahead make room for curiosity, rest, and your own pace.</p>}
         </article>
       </section>
+      {compatibilityOpen && <Modal title="Friendship communication styles" close={() => setCompatibilityOpen(false)}><p>This is a playful, traditional astrology reflection—not a measure of compatibility or an outcome forecast.</p><label className="field"><span>Compare {sign} with</span><select value={otherSign} onChange={(event) => setOtherSign(event.target.value as ZodiacSign)}>{zodiacSigns.map((item) => <option key={item}>{item}</option>)}</select></label><div className="recommendation-result"><Icon name="heart" /><div><h3>{sign} + {otherSign}</h3><p>{compatibilityText}</p></div></div><div className="modal-actions"><Button onClick={() => setCompatibilityOpen(false)}>Done</Button></div></Modal>}
     </div>
   );
 }
@@ -2670,12 +2731,17 @@ function Settings({ close, profile, setProfile, checkIns, activity, clearLocalDa
 
 export default function App() {
   const [page, setPageState] = useState<Page>("home");
+  const currentTime = useCurrentTime();
   const [profile, setProfile] = useSavedState<UserProfile>("manasika.profile.v1", defaultProfile);
   const [checkIns, setCheckIns] = useSavedState<MoodCheckIn[]>("manasika.checkins.v1", []);
   const [posts, setPosts] = useSavedState<CommunityPost[]>("manasika.community.posts.v1", []);
   const [joinedGroups, setJoinedGroups] = useSavedState<string[]>("manasika.community.groups.v1", []);
   const [activity, setActivity] = useSavedState<ActivityItem[]>("manasika.activity.v1", []);
   const [mood, setMood] = useState<number | null>(() => checkIns.find((item) => item.date === todayKey())?.mood ?? null);
+  const activeDay = localDateKey(currentTime);
+  useEffect(() => {
+    setMood(checkIns.find((item) => item.date === activeDay)?.mood ?? null);
+  }, [activeDay, checkIns]);
   const [settings, setSettings] = useState(false);
   const logActivity = (action: string, area: string) => recordActivity(setActivity, action, area);
   const saveCheckIn = (entry: Omit<MoodCheckIn, "id" | "date">) => {
@@ -2700,13 +2766,13 @@ export default function App() {
   let content: React.ReactNode;
     switch (page) {
       case "dashboard":
-        content = <Dashboard setPage={setPage} mood={mood} setMood={(nextMood) => saveCheckIn({ mood: nextMood, tags: [], note: "" })} profile={profile} />;
+        content = <Dashboard setPage={setPage} mood={mood} setMood={(nextMood) => saveCheckIn({ mood: nextMood, tags: [], note: "" })} profile={profile} checkIns={checkIns} />;
         break;
       case "discover":
         content = <Discover setPage={setPage} />;
         break;
       case "reflection":
-        content = <Reflection onActivity={() => logActivity("Saved a reflection", "Reflection")} />;
+        content = <Reflection onActivity={() => logActivity("Saved a reflection", "Reflection")} checkIns={checkIns} setPage={setPage} />;
         break;
       case "mood":
         content = <MoodJourney mood={mood} setMood={setMood} checkIns={checkIns} onSave={saveCheckIn} />;
@@ -2718,10 +2784,10 @@ export default function App() {
         content = <Peace />;
         break;
       case "student":
-        content = <StudentLife />;
+        content = <StudentLife setPage={setPage} />;
         break;
       case "growth":
-        content = <Growth />;
+        content = <Growth checkIns={checkIns} activity={activity} />;
         break;
       case "creative":
         content = <Creative />;
@@ -2748,7 +2814,7 @@ export default function App() {
       <AppShell page={page} setPage={setPage} openSettings={() => setSettings(true)} profile={profile}>
         {content}
       </AppShell>
-      {settings && <Settings close={() => setSettings(false)} profile={profile} setProfile={setProfile} checkIns={checkIns} activity={activity} clearLocalData={() => { setCheckIns([]); setPosts([]); setJoinedGroups([]); setActivity([]); setProfile(defaultProfile); localStorage.removeItem("manasika.reflections.v1"); setMood(null); }} />}
+      {settings && <Settings close={() => setSettings(false)} profile={profile} setProfile={setProfile} checkIns={checkIns} activity={activity} clearLocalData={() => { Object.keys(localStorage).filter((key) => key.startsWith("manasika.")).forEach((key) => localStorage.removeItem(key)); setCheckIns([]); setPosts([]); setJoinedGroups([]); setActivity([]); setProfile(defaultProfile); setMood(null); }} />}
     </>
   );
 }
