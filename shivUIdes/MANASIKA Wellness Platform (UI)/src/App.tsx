@@ -1313,6 +1313,13 @@ function MoodJourney({
   const [saved, setSaved] = useState(false);
   const [monthOffset, setMonthOffset] = useState(0);
   const [selectedDay, setSelectedDay] = useState<number | null>(null);
+  const monthDate = new Date();
+  monthDate.setDate(1);
+  monthDate.setMonth(monthDate.getMonth() + monthOffset);
+  const monthLabel = monthDate.toLocaleDateString(undefined, { month: "long", year: "numeric" });
+  const monthDays = new Date(monthDate.getFullYear(), monthDate.getMonth() + 1, 0).getDate();
+  const blankDays = (monthDate.getDay() + 6) % 7;
+  const checkInForDay = (day: number) => checkIns.find((item) => item.date === `${monthDate.getFullYear()}-${String(monthDate.getMonth() + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`);
   return (
     <div className="page">
       <PageHeader
@@ -1405,11 +1412,7 @@ function MoodJourney({
             <div>
               <small>YOUR MONTH</small>
               <h2>
-                {monthOffset === 0
-                  ? "September 2025"
-                  : monthOffset < 0
-                    ? "August 2025"
-                    : "October 2025"}
+                {monthLabel}
               </h2>
             </div>
             <div>
@@ -1421,48 +1424,37 @@ function MoodJourney({
             {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((d) => (
               <b key={d}>{d}</b>
             ))}
-            {Array.from({ length: 35 }, (_, i) =>
-              i < 2 ? (
-                <span key={i} />
-              ) : (
+            {Array.from({ length: blankDays }, (_, i) => <span key={`empty-${i}`} />)}
+            {Array.from({ length: monthDays }, (_, i) => {
+              const day = i + 1;
+              const checkIn = checkInForDay(day);
+              return (
                 <button
-                  key={i}
-                  className={selectedDay === i - 1 ? "selected-day" : ""}
-                  onClick={() => setSelectedDay(i - 1)}
+                  key={day}
+                  className={selectedDay === day ? "selected-day" : ""}
+                  onClick={() => setSelectedDay(day)}
                 >
-                  <i>{i - 1}</i>
-                  {calendarMoods[i - 1] !== undefined && (
-                    <em>{moods[calendarMoods[i - 1]].emoji}</em>
-                  )}
+                  <i>{day}</i>{checkIn && <em>{moods[checkIn.mood].emoji}</em>}
                 </button>
-              ),
-            )}
+              );
+            })}
           </div>
           {selectedDay && (
             <div className="day-detail">
               <span>
-                {calendarMoods[selectedDay] !== undefined
-                  ? moods[calendarMoods[selectedDay]].emoji
+                {checkInForDay(selectedDay)
+                  ? moods[checkInForDay(selectedDay)!.mood].emoji
                   : "—"}
               </span>
               <div>
-                <b>September {selectedDay}</b>
+                <b>{monthLabel} {selectedDay}</b>
                 <small>
-                  {calendarMoods[selectedDay] !== undefined
+                  {checkInForDay(selectedDay)
                     ? "Your saved check-in"
                     : "No check-in saved"}
                 </small>
               </div>
-              {calendarMoods[selectedDay] !== undefined && (
-                <>
-                  <button>
-                    <Icon name="edit" /> Edit
-                  </button>
-                  <button>
-                    <Icon name="trash" /> Delete
-                  </button>
-                </>
-              )}
+              {checkInForDay(selectedDay) && <small>{checkInForDay(selectedDay)!.tags.join(" · ") || "Check-in saved"}</small>}
             </div>
           )}
         </section>
@@ -1470,14 +1462,14 @@ function MoodJourney({
           <small>GENTLE PATTERNS</small>
           <h2>Your recent week</h2>
           <div className="timeline-chart">
-            {[40, 60, 52, 35, 72, 78, 65].map((h, i) => (
-              <span key={i}>
-                <i style={{ height: `${h}%` }} />
-                <small>{["M", "T", "W", "T", "F", "S", "S"][i]}</small>
-              </span>
-            ))}
+            {Array.from({ length: 7 }, (_, i) => {
+              const day = new Date(); day.setHours(0, 0, 0, 0); day.setDate(day.getDate() - 6 + i);
+              const key = `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, "0")}-${String(day.getDate()).padStart(2, "0")}`;
+              const checkIn = checkIns.find((item) => item.date === key);
+              return <span key={key}><i style={{ height: `${checkIn ? 20 + (4 - checkIn.mood) * 18 : 6}%` }} /><small>{day.toLocaleDateString(undefined, { weekday: "short" }).slice(0, 1)}</small></span>;
+            })}
           </div>
-          <h3>Peaceful appeared most often</h3>
+          <h3>{checkIns.length ? `${checkIns.length} check-in${checkIns.length === 1 ? "" : "s"} recorded` : "Your patterns start with a check-in"}</h3>
           <p>
             Your records are self-reported feelings, not a clinical measurement. Patterns are
             invitations to reflect, never conclusions about you.
@@ -2642,6 +2634,7 @@ function Settings({ close, profile, setProfile, checkIns, activity, clearLocalDa
               This prototype stores profile, check-ins, reflections, posts, and activity on this device only. Community drafts are not shared or synced with other people.
             </p>
           </div>
+          {profile.insightsEnabled && <section className="activity-log"><h3>Private activity log</h3><p>Section visits and saved check-ins from this browser. Message and journal contents are not included.</p>{activity.length ? <ul>{activity.slice(0, 20).map((item) => <li key={item.id}><span>{item.action} · {item.area}</span><small>{new Date(item.date).toLocaleString()}</small></li>)}</ul> : <small>No activity recorded yet.</small>}</section>}
           <Button
             variant="secondary"
             onClick={() => {
