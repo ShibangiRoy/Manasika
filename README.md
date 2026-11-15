@@ -1,43 +1,71 @@
 # Manasika
 
-Manasika is a student wellness prototype with the Figma-exported React experience in `shivUIdes/MANASIKA Wellness Platform (UI)`. Render builds and serves this folder directly as the production site, so the older workspace-root mockup is not part of the deployment.
+Manasika is a student wellness prototype built from the Figma-exported React app in `shivUIdes/MANASIKA Wellness Platform (UI)`. The Render configuration builds and serves this Figma UI directly; the older workspace mockup is not part of the deployment.
+
+## URLs
+
+- **Local development:** [http://localhost:4173](http://localhost:4173) after starting Vite with the command below.
+- **Expected Render URL:** [https://manasika-wellness.onrender.com](https://manasika-wellness.onrender.com) — checked 15 Nov 2026; currently returns Render `404 no-server`, so there is no verified live public site yet.
 
 ## Requirements
 
-- Node.js 22.14 or newer (the project pins 22.14 in `.node-version`)
+- Node.js 22.14 or newer (`.node-version` pins 22.14.0)
 - npm 10 or newer
 
-## Run locally
+## Installation and local run
+
+From the repository root, enter the app folder, install the locked dependencies, and start the development server:
 
 ```powershell
 cd "shivUIdes/MANASIKA Wellness Platform (UI)"
 npm ci
-npm run dev -- --host 127.0.0.1
+npm run dev -- --host 0.0.0.0 --port 4173
 ```
 
-Open the Vite URL printed in the terminal. To make the production build:
+Open [http://localhost:4173](http://localhost:4173). Stop Vite with `Ctrl+C`.
+
+To create and preview a production build locally:
 
 ```powershell
 npm run build
-npm run preview -- --host 127.0.0.1
+npm run preview -- --host 0.0.0.0 --port 4173
 ```
 
-## Render deployment
+## Build and deployment pipelines
 
-The root `render.yaml` defines the public static site. Connect the GitHub repository to Render and sync the Blueprint:
+### Build pipeline
 
-1. Render reads `render.yaml` from the `main` branch.
-2. The service uses `shivUIdes/MANASIKA Wellness Platform (UI)` as its root directory.
-3. Render runs `npm ci && npm run build` and publishes `dist`.
-4. Pushes to `main` deploy automatically after the Blueprint is first approved.
+1. `npm ci` installs exact dependency versions from `package-lock.json`.
+2. `npm run build` creates the optimized static site in `dist/`.
+3. A static hosting service publishes `dist/`; no Node server process or port binding is needed in production.
 
-The service is a static website; it needs no server process or port binding. The built site is served from Render’s public site URL.
+### Render
 
-## Features and data boundaries
+The root `render.yaml` is configured for the existing Figma app folder:
 
-The prototype includes onboarding preferences, mood check-ins, reflection entries, locally saved community drafts and group choices, an activity summary, export, and local data deletion. These are stored in the current browser using local storage. Community content is not transmitted or visible to other users, and user data does not sync across devices. Companion replies are prototype guidance, not a connected or fine-tuned model. No diagnostic or clinical claims are made.
+- Root directory: `shivUIdes/MANASIKA Wellness Platform (UI)`
+- Build command: `npm ci && npm run build`
+- Publish directory: `dist`
+- Branch: `main`
+
+Connect the GitHub repository in Render and sync/approve the Blueprint. After the first sync, pushes to `main` can deploy automatically. The expected URL above currently has no active Render service, so the Blueprint still needs to be synced or the correct service URL supplied.
+
+### Cloudflare Pages alternative
+
+If Render’s API or connection remains unavailable, connect the GitHub repository to a Cloudflare Pages project and configure:
+
+- Root directory: `shivUIdes/MANASIKA Wellness Platform (UI)`
+- Build command: `npm ci && npm run build`
+- Build output directory: `dist`
+- Production branch: `main`
+
+Cloudflare Pages can build and deploy on GitHub pushes without using Render’s API. A one-time project setup in Cloudflare is required; no Cloudflare public URL has been created for this repository yet.
+
+## Prototype data boundaries
+
+Profile preferences, mood check-ins, reflection entries, community drafts, group selections, and activity logs are stored in the current browser. Community posts are not sent to other users or synced across devices. Companion replies are prototype guidance, not a connected or fine-tuned model.
 
 ## Project layout
 
-- `shivUIdes/MANASIKA Wellness Platform (UI)/` — React and Vite application source
-- `render.yaml` — Render static site configuration
+- `shivUIdes/MANASIKA Wellness Platform (UI)/` — React and Vite app source
+- `render.yaml` — Render static-site configuration
