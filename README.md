@@ -48,11 +48,26 @@ The interface reads the visitor’s device clock and local timezone. Date and ti
 
 The provided zodiac prompt/response dataset is served from `shivUIdes/manasika-ui/public/data/western_zodiac_signs.json`. Cosmic Corner validates and loads its 500 records on first use, stores a versioned copy in the browser's `manasika-cosmic-corner` IndexedDB database, and retrieves a sign-matched response using the visitor's local date. Built-in reflections remain available if browser storage or the dataset request is unavailable.
 
-This repository deploys a static Figma UI and has no server backend or model-training pipeline. The dataset is used for runtime retrieval; it does not fine-tune model weights. The IndexedDB copy stays in the current browser/device and is not shared between users.
+The Figma UI is deployed as a static site and the companion/media API is a separate server. The prototype has no trainable language-model weights or model-training pipeline. It uses runtime retrieval and does not fine-tune model weights. Browser IndexedDB data stays on the current browser/device and is not shared between users.
 
 ## AI Companion data
 
 The base mental-health support file remains at `shivUIdes/manasika-ui/public/data/mental_health_support_chat.json`. The supplied augmented corpus is preserved as a gzip file under `public/data/datasets/ai_companion/`; the backend streams it into persistent SQLite memory without loading the entire source into application memory. The database retains source records and marks only first-person mental-health support examples that pass relevance/safety filters as retrievable. Companion responses search this server memory first, then fall back to the browser's versioned `manasika-ai-companion-memory` IndexedDB if the backend is unavailable. Chat messages themselves are not stored. Urgent-risk messages and requests for diagnosis or medication guidance use fixed safety responses before retrieval. This is retrieval-based data modeling; it does not fine-tune model weights.
+
+## AI Companion literature
+
+The backend imports attributed, section-indexed chunks from the supplied public-domain Dostoevsky and Kafka works in `shivUIdes/manasika-ui/literature-data/` into the persistent `ai_companion_literature` SQLite table. These sources are retrieved only for literary questions; responses identify the work and limit direct excerpts to 25 words. The Figma UI and its tabs are unchanged.
+
+The supplied 1976 Eysenck/Wilson psychology textbook carries an explicit copyright notice, so its text is not shipped in the public dataset or Docker image. To index the user's local copy for private use, install `pypdf` and run this from `shivUIdes/manasika-ui`:
+
+```powershell
+python -m pip install pypdf
+python scripts/import-private-psychology-pdf.py `
+  --pdf "../../Literature_dataelements/1976_eysenck_wilson_-_textbook_of_human_psychology_lancaster_mtp_press.pdf" `
+  --database "data/creative.sqlite"
+```
+
+This writes extracted chunks to Git-ignored `data/creative.sqlite`; do not publish that database or the extracted text without appropriate rights. Psychology references are labeled as historical educational context, not clinical guidance. This is retrieval-augmented memory, not fine-tuning. Full source notes and rights details are in `shivUIdes/manasika-ui/literature-data/README.md`.
 
 ## Creative Space data
 

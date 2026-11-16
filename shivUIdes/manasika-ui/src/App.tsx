@@ -2519,7 +2519,7 @@ function Cosmic() {
   );
 }
 
-function Companion({ setPage, profile, latestMood }: { setPage: (p: Page) => void; profile: UserProfile; latestMood: number | null }) {
+function Companion({ setPage, profile }: { setPage: (p: Page) => void; profile: UserProfile }) {
   const [messages, setMessages] = useState<{ id: string; from: "ai" | "user"; text: string }[]>([
     {
       id: "welcome",
@@ -2538,9 +2538,8 @@ function Companion({ setPage, profile, latestMood }: { setPage: (p: Page) => voi
       { id: replyId, from: "ai", text: "Let me think this through with care…" },
     ]);
     setText("");
-    const fallback = latestMood !== null && latestMood >= 3
-      ? "That sounds heavy. We can take this one small moment at a time. Would you prefer a grounding exercise or a gentle reflection prompt?"
-      : "Thank you for sharing that. Would it help to explore a small next step, or would you rather pause with a calming exercise?";
+    const quotedQuestion = message.length > 160 ? `${message.slice(0, 157).trimEnd()}…` : message;
+    const fallback = `I want to respond to “${quotedQuestion}” specifically, and I’m not finding a close enough match yet. What part of this would you most like help with?`;
     const reply = await getCompanionDatasetReply(message).catch(() => null);
     setMessages((items) => items.map((item) => item.id === replyId ? { ...item, text: reply || fallback } : item));
   };
@@ -2987,7 +2986,7 @@ export default function App() {
         content = <Cosmic />;
         break;
       case "companion":
-        content = <Companion setPage={setPage} profile={profile} latestMood={mood} />;
+        content = <Companion setPage={setPage} profile={profile} />;
         break;
       case "support":
         content = <Support />;

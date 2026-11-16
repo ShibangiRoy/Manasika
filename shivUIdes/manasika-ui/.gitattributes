@@ -66,6 +66,7 @@
 # Keep the compressed, versioned companion dataset in Git directly. It is below
 # GitHub's 100 MB per-file limit and needs to ship with the static data bundle.
 public/data/datasets/ai_companion/*.gz -filter -diff -merge -text
+literature-data/*.gz -filter -diff -merge -text
 *.bz2                filter=lfs diff=lfs merge=lfs -text
 *.7z                 filter=lfs diff=lfs merge=lfs -text
 *.rar                filter=lfs diff=lfs merge=lfs -text

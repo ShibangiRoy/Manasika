@@ -92,6 +92,22 @@ database.exec(`
     PRIMARY KEY(dataset_key, record_id)
   );
   CREATE INDEX IF NOT EXISTS ai_companion_external_support ON ai_companion_external_memory(dataset_key, support_eligible);
+  CREATE TABLE IF NOT EXISTS ai_companion_literature (
+    dataset_key TEXT NOT NULL,
+    record_id INTEGER NOT NULL,
+    title TEXT NOT NULL,
+    author TEXT NOT NULL,
+    translator TEXT NOT NULL DEFAULT '',
+    source_kind TEXT NOT NULL,
+    source_location TEXT NOT NULL,
+    page_start INTEGER,
+    page_end INTEGER,
+    source_sha256 TEXT NOT NULL,
+    rights TEXT NOT NULL,
+    content TEXT NOT NULL,
+    PRIMARY KEY(dataset_key, record_id)
+  );
+  CREATE INDEX IF NOT EXISTS ai_companion_literature_kind ON ai_companion_literature(source_kind, dataset_key);
   CREATE TABLE IF NOT EXISTS creative_dataset_records (
     dataset_key TEXT NOT NULL,
     record_id INTEGER NOT NULL,
@@ -253,6 +269,47 @@ async function syncAugmentedCompanionDataset() {
   }
 }
 
+async function syncPublicDomainLiterature() {
+  const datasetKey = "public_domain_literature";
+  const filePath = path.join(appRoot, "literature-data", "public-domain-literature.json.gz");
+  let sha256;
+  try { sha256 = await datasetFileHash(filePath); } catch {
+    console.warn("Public-domain literature corpus is unavailable; retaining the current database copy.");
+    return;
+  }
+  const current = database.prepare("SELECT sha256 FROM ai_companion_memory_meta WHERE dataset_key = ?").get(datasetKey);
+  if (current?.sha256 === sha256) return;
+  const insert = database.prepare(`INSERT INTO ai_companion_literature
+    (dataset_key, record_id, title, author, translator, source_kind, source_location,
+     page_start, page_end, source_sha256, rights, content)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+  let rowCount = 0;
+  database.exec("BEGIN IMMEDIATE");
+  try {
+    database.prepare("DELETE FROM ai_companion_literature WHERE dataset_key = ?").run(datasetKey);
+    const compressed = createReadStream(filePath).pipe(createGunzip());
+    compressed.setEncoding("utf8");
+    for await (const row of readJsonArrayItems(compressed)) {
+      if (!row || typeof row.content !== "string" || !row.content.trim()
+        || typeof row.title !== "string" || typeof row.author !== "string") continue;
+      insert.run(datasetKey, rowCount, row.title, row.author, row.translator || "", row.source_kind || "classic_literature",
+        row.source_location || "", Number.isInteger(row.page_start) ? row.page_start : null,
+        Number.isInteger(row.page_end) ? row.page_end : null, row.source_sha256 || sha256, row.rights || "", row.content.trim());
+      rowCount++;
+    }
+    if (!rowCount) throw new Error("Public-domain literature corpus had no valid chunks.");
+    database.prepare(`INSERT INTO ai_companion_memory_meta(dataset_key, sha256, row_count, updated_at)
+      VALUES (?, ?, ?, ?) ON CONFLICT(dataset_key) DO UPDATE SET sha256=excluded.sha256,
+      row_count=excluded.row_count, updated_at=excluded.updated_at`)
+      .run(datasetKey, sha256, rowCount, new Date().toISOString());
+    database.exec("COMMIT");
+    console.log(`Loaded ${rowCount} public-domain literature chunks into AI Companion memory.`);
+  } catch (error) {
+    database.exec("ROLLBACK");
+    throw error;
+  }
+}
+
 async function syncCompanionMemory() {
   let raw;
   try {
@@ -299,6 +356,7 @@ async function syncCompanionMemory() {
 await syncCompanionMemory();
 await syncCreativeDatasetFiles();
 await syncAugmentedCompanionDataset();
+await syncPublicDomainLiterature();
 
 const accountInsert = database.prepare("INSERT OR IGNORE INTO creative_accounts(id, created_at) VALUES (?, ?)");
 const getAccount = database.prepare("SELECT id FROM creative_accounts WHERE id = ?");
@@ -316,6 +374,8 @@ const deleteMedia = database.prepare("DELETE FROM creative_media WHERE id = ? AN
 const insertCreativeInput = database.prepare(`INSERT INTO creative_user_inputs(id, account_id, medium, prompt, content, created_at)
   VALUES (?, ?, ?, ?, ?, ?)`);
 const listCompanionMemory = database.prepare("SELECT prompt, completion FROM ai_companion_memory");
+const listCompanionLiterature = database.prepare(`SELECT title, author, translator, source_kind, source_location,
+  page_start, page_end, content, rights FROM ai_companion_literature`);
 const getAugmentedCompanionCompletion = database.prepare(`SELECT completion FROM ai_companion_external_memory
   WHERE dataset_key = ? AND record_id = ? AND support_eligible = 1`);
 
@@ -374,38 +434,128 @@ function mediaDto(row) {
   };
 }
 
-const supportStopWords = new Set("about after again all also and are because been before being but can could did does for from had has have how into its just more most not of on our out she should some than that the their them then there these they this those through too was were what when where which while who why with would you your".split(" "));
+const supportStopWords = new Set("about after again all also and are because been before being but can could did does feel feels feeling felt for from had has have help how into its just more most need not of our out please really she should some than that the their them then there these they this those think through too was were want what when where which while who why with would you your".split(" "));
 const urgentSupportPattern = /\b(suicid(?:e|al)|kill myself|end my life|want to die|don't want to live|do not want to live|self[- ]harm(?:ed|ing)?|hurt myself|harm myself|overdose|can't keep myself safe|cannot keep myself safe|not safe with myself|kill someone|hurt someone)\b/i;
 const medicalBoundaryPattern = /\b(diagnos(?:e|is|ing)|what do i have|medication|prescription|dosage|side effects)\b/i;
 const urgentSupportReply = "I’m sorry this feels so heavy. I can’t provide emergency support. If you may hurt yourself or someone else now, contact your local emergency number or go to the nearest emergency department. If you can, tell someone you trust and ask them to stay with you. You can also open Professional & crisis support for resources.";
 const medicalBoundaryReply = "I can listen and offer general emotional support, but I can’t diagnose a condition or advise on medication. A licensed healthcare professional can help with those questions. If you’d like, I can help you think of what you want to ask them.";
 
-function companionDatasetReply(message) {
-  if (urgentSupportPattern.test(message)) return urgentSupportReply;
-  if (medicalBoundaryPattern.test(message)) return medicalBoundaryReply;
-  const queryTerms = [...new Set(message.toLowerCase().match(/[a-z]{3,}/g)?.filter((word) => !supportStopWords.has(word)) ?? [])];
-  if (!queryTerms.length) return null;
-  const pairs = listCompanionMemory.all();
-  const termsFor = (value) => value.toLowerCase().match(/[a-z]{3,}/g)?.filter((word) => !supportStopWords.has(word)) ?? [];
-  const likeTerms = queryTerms.slice(0, 12);
-  const augmentedDocs = database.prepare(`SELECT record_id, prompt FROM ai_companion_external_memory
-    WHERE dataset_key = ? AND support_eligible = 1 AND (${likeTerms.map(() => "prompt LIKE ?").join(" OR ")}) LIMIT 250`)
-    .all("mental_health_support_chat_augmented", ...likeTerms.map((term) => `%${term}%`))
-    .map((row) => ({ recordId: row.record_id, prompt: row.prompt, augmented: true, terms: new Set(termsFor(row.prompt)) }));
-  const docs = [
-    ...pairs.map((pair) => ({ pair, prompt: pair.prompt, augmented: false, terms: new Set(termsFor(pair.prompt)) })),
-    ...augmentedDocs,
+const companionAliases = new Map([
+  ["stressed", "stress"], ["stressful", "stress"], ["stressing", "stress"],
+  ["anxious", "anxiety"], ["worry", "anxiety"], ["worried", "anxiety"], ["worrying", "anxiety"],
+  ["depressed", "lowmood"], ["depression", "lowmood"], ["sad", "lowmood"], ["sadness", "lowmood"],
+  ["loneliness", "lonely"], ["overwhelmed", "overwhelm"], ["overwhelming", "overwhelm"],
+  ["exams", "exam"], ["tests", "exam"], ["studies", "study"], ["studying", "study"],
+  ["friends", "relationship"], ["friendship", "relationship"], ["relationships", "relationship"],
+  ["sleeping", "sleep"], ["burned", "burnout"], ["burnt", "burnout"],
+]);
+const companionTopicGroups = [
+  /\b(stress|burnout|overwhelm|pressure|workload)\b/i,
+  /\b(anxiety|panic|worry|fear|nervous)\b/i,
+  /\b(lowmood|lonely|grief|hopeless|isolat)\b/i,
+  /\b(exam|study|college|school|academic|student|assignment)\b/i,
+  /\b(relationship|partner|friend|family|conflict)\b/i,
+  /\b(sleep|insomnia|tired|fatigue)\b/i,
+  /\b(anger|angry|irritat)\b/i,
+];
+
+function companionTerms(value) {
+  return (value.toLowerCase().match(/[a-z]{3,}/g) ?? [])
+    .filter((word) => !supportStopWords.has(word))
+    .map((word) => companionAliases.get(word) ?? word);
+}
+
+function companionTopics(value) {
+  const normalized = companionTerms(value).join(" ");
+  return companionTopicGroups.reduce((topics, pattern, index) => pattern.test(normalized) ? [...topics, index] : topics, []);
+}
+
+function companionFollowUp(message) {
+  const followUps = [
+    "What part feels most urgent right now?",
+    "What tends to trigger that worry most?",
+    "Would a small comforting action or talking it through feel better right now?",
+    "Which assignment or deadline is weighing on you most?",
+    "What would you like the other person to understand?",
+    "What usually keeps your mind active when you are trying to rest?",
+    "What happened just before that feeling became intense?",
   ];
-  const weights = new Map(queryTerms.map((term) => [term, Math.log(1 + pairs.length / (1 + docs.reduce((n, doc) => n + Number(doc.terms.has(term)), 0)))]));
+  const topic = companionTopics(message)[0];
+  return followUps[topic] ?? "Which part feels most important to focus on first?";
+}
+
+const classicLiteratureIntent = /\b(book|novel|story|stories|character|plot|chapter|literature|fiction|poem|white nights|metamorphosis|dostoevsky|dostoyevsky|kafka|gregor samsa|nastenka)\b/i;
+const psychologyLearningIntent = /\b(psycholog(?:y|ical)|perception|conditioning|psychometrics|intelligence|personality|heredity|developmental|social psychology|eysenck|textbook)\b/i;
+const clinicalPersonalIntent = /\b(i feel|i'm feeling|i am feeling|my anxiety|my depression|my mood|i have anxiety|i have depression|help me cope|what should i do|i am struggling|i'm struggling)\b/i;
+
+function companionLiteratureReply(message, sourceKind) {
+  const queryTerms = [...new Set(companionTerms(message))];
+  if (!queryTerms.length) return null;
+  const docs = listCompanionLiterature.all()
+    .filter((row) => row.source_kind === sourceKind)
+    .map((row) => ({ row, terms: new Set(companionTerms(`${row.title} ${row.author} ${row.source_location} ${row.content}`)) }));
+  if (!docs.length) return null;
+  const weights = new Map(queryTerms.map((term) => [term, Math.log(1 + (docs.length + 0.5)
+    / (docs.reduce((count, doc) => count + Number(doc.terms.has(term)), 0) + 0.5))]));
   const queryWeight = [...weights.values()].reduce((sum, weight) => sum + weight, 0) || 1;
   let best = null;
   for (const doc of docs) {
-    let score = 0;
-    for (const term of queryTerms) if (doc.terms.has(term)) score += weights.get(term) ?? 0;
-    score /= queryWeight;
+    const matched = queryTerms.filter((term) => doc.terms.has(term));
+    if (queryTerms.length >= 2 && matched.length < 2) continue;
+    const coverage = matched.reduce((sum, term) => sum + (weights.get(term) ?? 0), 0) / queryWeight;
+    const titleTerms = new Set(companionTerms(`${doc.row.title} ${doc.row.author}`));
+    const titleMatch = queryTerms.some((term) => titleTerms.has(term));
+    const score = coverage * 0.88 + Number(titleMatch) * 0.12;
     if (!best || score > best.score) best = { doc, score };
   }
-  if (!best || best.score < 0.12) return null;
+  if (!best || best.score < 0.32) return null;
+  const words = best.doc.row.content.replace(/\s+/g, " ").match(/[^\s]+/g) ?? [];
+  const excerpt = words.slice(0, 25).join(" ").replace(/^[^A-Za-z0-9]+/, "").replace(/[^A-Za-z0-9.!?]+$/, "");
+  if (!excerpt) return null;
+  const row = best.doc.row;
+  const location = row.page_start ? `, pp. ${row.page_start}-${row.page_end || row.page_start}` : row.source_location ? `, ${row.source_location}` : "";
+  if (sourceKind === "psychology_reference") {
+    return `A historical psychology reference from ${row.author}, ${row.title}${location}: “${excerpt}” This 1976 text is educational context, not current clinical guidance.`;
+  }
+  return `In ${row.title} by ${row.author}${location}: “${excerpt}” Would you like to explore this passage, the character, or the larger theme?`;
+}
+
+function companionDatasetReply(message) {
+  if (urgentSupportPattern.test(message)) return urgentSupportReply;
+  if (medicalBoundaryPattern.test(message)) return medicalBoundaryReply;
+  const namedClassic = /\b(white nights|metamorphosis|dostoevsky|dostoyevsky|kafka|gregor samsa|nastenka)\b/i.test(message);
+  if (!clinicalPersonalIntent.test(message) && (namedClassic || classicLiteratureIntent.test(message))) {
+    return companionLiteratureReply(message, "classic_literature");
+  }
+  if (psychologyLearningIntent.test(message) && !clinicalPersonalIntent.test(message)) {
+    return companionLiteratureReply(message, "psychology_reference");
+  }
+  const queryTerms = [...new Set(companionTerms(message))];
+  if (!queryTerms.length) return null;
+  const pairs = listCompanionMemory.all();
+  const augmentedDocs = database.prepare(`SELECT record_id, prompt FROM ai_companion_external_memory
+    WHERE dataset_key = ? AND support_eligible = 1`)
+    .all("mental_health_support_chat_augmented")
+    .map((row) => ({ recordId: row.record_id, prompt: row.prompt, augmented: true, terms: new Set(companionTerms(row.prompt)) }));
+  const docs = [
+    ...pairs.map((pair) => ({ pair, prompt: pair.prompt, augmented: false, terms: new Set(companionTerms(pair.prompt)) })),
+    ...augmentedDocs,
+  ];
+  const weights = new Map(queryTerms.map((term) => [term, Math.log(1 + (docs.length + 0.5) / (docs.reduce((n, doc) => n + Number(doc.terms.has(term)), 0) + 0.5))]));
+  const queryWeight = [...weights.values()].reduce((sum, weight) => sum + weight, 0) || 1;
+  const queryTopics = companionTopics(message);
+  let best = null;
+  for (const doc of docs) {
+    const matched = queryTerms.filter((term) => doc.terms.has(term));
+    const coverage = matched.reduce((sum, term) => sum + (weights.get(term) ?? 0), 0) / queryWeight;
+    const topicMatch = companionTopics(doc.prompt).some((topic) => queryTopics.includes(topic));
+    const phraseMatch = queryTerms.some((term, index) => index < queryTerms.length - 1
+      && doc.prompt.toLowerCase().includes(`${term} ${queryTerms[index + 1]}`));
+    const score = coverage * 0.78 + Number(topicMatch) * 0.14 + Number(phraseMatch) * 0.08;
+    if (queryTerms.length >= 2 && matched.length < 2 && !topicMatch) continue;
+    if (!best || score > best.score) best = { doc, score };
+  }
+  if (!best || best.score < 0.34) return null;
   const completion = best.doc.augmented
     ? getAugmentedCompanionCompletion.get("mental_health_support_chat_augmented", best.doc.recordId)?.completion
     : best.doc.pair.completion;
@@ -420,7 +570,8 @@ function companionDatasetReply(message) {
     selected.push(sentence.trim());
     words += count;
   }
-  return selected.join(" ") || sentences[0]?.trim() || null;
+  const answer = selected.join(" ") || sentences[0]?.trim() || "";
+  return answer && !/[?？]\s*$/.test(answer) ? `${answer} ${companionFollowUp(message)}` : answer || null;
 }
 
 async function ensureSession(req) {
