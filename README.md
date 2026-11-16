@@ -48,7 +48,7 @@ The interface reads the visitor’s device clock and local timezone. Date and ti
 
 The provided zodiac prompt/response dataset is served from `shivUIdes/manasika-ui/public/data/western_zodiac_signs.json`. Cosmic Corner validates and loads its 500 records on first use, stores a versioned copy in the browser's `manasika-cosmic-corner` IndexedDB database, and retrieves a sign-matched response using the visitor's local date. Built-in reflections remain available if browser storage or the dataset request is unavailable.
 
-The Figma UI is deployed as a static site and the companion/media API is a separate server. The prototype has no trainable language-model weights or model-training pipeline. The backend synchronizes versioned datasets into SQLite, then builds a reusable term index over support and literature records so Companion can search its stored knowledge directly. New dataset versions are picked up on backend startup. This retrieval-augmented approach lets the assistant use the database assets as context; it does not update model weights or fine-tune the model. Browser IndexedDB data stays on the current browser/device and is not shared between users.
+The Figma UI is deployed as a static site and the companion/media API is a separate server. No language-model weights are bundled with the default deployment. The backend synchronizes versioned datasets into SQLite, then builds a reusable term index over support and literature records so Companion can search its stored knowledge directly. New dataset versions are picked up on backend startup. An optional local LoRA pipeline can train adapter weights and serve them separately; see the AI Companion training guide below. Browser IndexedDB data stays on the current browser/device and is not shared between users.
 
 ## AI Companion data
 
@@ -68,6 +68,8 @@ python scripts/import-private-psychology-pdf.py `
 ```
 
 This writes extracted chunks to Git-ignored `data/creative.sqlite`; do not publish that database or the extracted text without appropriate rights. Psychology references are labeled as historical educational context, not clinical guidance. This is retrieval-augmented memory, not fine-tuning. Full source notes and rights details are in `shivUIdes/manasika-ui/literature-data/README.md`.
+
+An optional LoRA fine-tuning and local inference pipeline is available in `shivUIdes/manasika-ui/training/`. A 19.6 MB pilot adapter is included under `training/weights/`; it was trained on 128 of 1,310 eligible support and public-domain literature examples. It demonstrates actual weight updates, but is not production-ready. The pipeline downloads the Apache-2.0 HuggingFaceTB/SmolLM2-135M-Instruct base weights to the local Hugging Face cache and can connect to the backend with `COMPANION_MODEL_API_URL`. Full training checkpoints and prepared data stay Git-ignored. See the training README for setup, data-safety filters, and hardware requirements. Retrieval remains enabled when the optional model is not running.
 
 ## Creative Space data
 

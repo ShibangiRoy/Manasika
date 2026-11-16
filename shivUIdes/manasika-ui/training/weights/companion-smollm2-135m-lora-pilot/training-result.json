@@ -1,0 +1,15 @@
+{
+  "base_model": "HuggingFaceTB/SmolLM2-135M-Instruct",
+  "examples": 128,
+  "epochs": 1.0,
+  "train_metrics": {
+    "train_runtime": 615.7513,
+    "train_samples_per_second": 0.208,
+    "train_steps_per_second": 0.052,
+    "total_flos": 20091141929088.0,
+    "train_loss": 3.260699450969696,
+    "epoch": 1.0
+  },
+  "adapter_type": "LoRA",
+  "created_at": "2026-11-16T15:25:55.128499+00:00"
+}

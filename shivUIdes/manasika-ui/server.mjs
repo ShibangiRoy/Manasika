@@ -28,6 +28,7 @@ const maxImageBytes = 12 * 1024 * 1024;
 const sessionSecret = process.env.MEDIA_SESSION_SECRET || (process.env.NODE_ENV === "production" ? "" : randomBytes(32).toString("base64url"));
 const providerKey = process.env.POLLINATIONS_API_KEY || "";
 const providerModel = process.env.POLLINATIONS_IMAGE_MODEL || "black-forest-labs/flux.1-schnell";
+const companionModelApiUrl = process.env.COMPANION_MODEL_API_URL || "";
 const allowedOrigins = new Set((process.env.CREATIVE_MEDIA_ALLOWED_ORIGINS || "http://localhost:4173,http://127.0.0.1:4173,http://localhost:8443,http://127.0.0.1:8443")
   .split(",").map((origin) => origin.trim()).filter(Boolean));
 const mimeTypes = new Map([
@@ -583,6 +584,32 @@ function companionDatasetReply(message) {
   return selected.join(" ") || null;
 }
 
+async function companionModelReply(message, memory) {
+  if (!companionModelApiUrl) return null;
+  let endpoint;
+  try { endpoint = new URL(companionModelApiUrl); } catch { return null; }
+  const localHost = ["localhost", "127.0.0.1", "::1"].includes(endpoint.hostname);
+  if (endpoint.protocol !== "https:" && !(endpoint.protocol === "http:" && localHost)) {
+    console.warn("Companion model endpoint must use HTTPS or a loopback HTTP address.");
+    return null;
+  }
+  try {
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({ message, memory: memory || "" }),
+      signal: AbortSignal.timeout(45_000),
+    });
+    if (!response.ok) return null;
+    const result = await response.json();
+    const reply = typeof result.reply === "string" ? result.reply.trim() : "";
+    return reply && reply.length <= 2400 ? reply : null;
+  } catch {
+    console.warn("Companion fine-tuned model is unavailable; using database retrieval response.");
+    return null;
+  }
+}
+
 async function ensureSession(req) {
   let accountId = sessionAccount(req);
   if (!accountId) {
@@ -699,7 +726,10 @@ async function handleRequest(req, res) {
       try { body = await readJson(req); } catch (error) { return sendJson(res, 400, { error: error.message }); }
       const message = typeof body.message === "string" ? body.message.trim() : "";
       if (!message || message.length > 4000) return sendJson(res, 400, { error: "Enter a message between 1 and 4,000 characters." });
-      return sendJson(res, 200, { reply: companionDatasetReply(message) });
+      const memoryReply = companionDatasetReply(message);
+      const isSafetyReply = urgentSupportPattern.test(message) || medicalBoundaryPattern.test(message);
+      const generatedReply = isSafetyReply ? null : await companionModelReply(message, memoryReply);
+      return sendJson(res, 200, { reply: generatedReply || memoryReply });
     }
     if (req.method === "GET" && pathname === "/api/creative/media") {
       return sendJson(res, 200, { items: listMedia.all(accountId).map(mediaDto) });

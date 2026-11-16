@@ -1,0 +1,3 @@
+# The pilot adapter is 19.6 MB, below GitHub's regular Git file limit.
+# Keep this artifact out of LFS so clones do not depend on LFS hydration.
+*.safetensors -filter -diff -merge -text
