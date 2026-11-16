@@ -17,12 +17,8 @@ services:
     rootDir: "shivUIdes/manasika-ui"
     dockerfilePath: ./Dockerfile
     dockerContext: .
-    plan: 0.5c-512mb
+    plan: free
     healthCheckPath: /healthz
-    disk:
-      name: manasika-media-archive
-      mountPath: /app/data
-      sizeGB: 1
     envVars:
       - key: MANASIKA_MEDIA_DATA_DIR
         value: /app/data

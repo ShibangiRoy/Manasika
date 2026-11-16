@@ -2277,7 +2277,7 @@ function Creative() {
               />
             </label>
             <p>
-              It can be messy, unfinished, abstract, or quiet. Prompts are sent to the image service; generated images are archived privately for 30 days.
+              It can be messy, unfinished, abstract, or quiet. Prompts are sent to the image service; generated images are kept in a temporary private archive for up to {mediaArchiveDays} days. On Render Free, the archive may clear when the service sleeps, restarts, or redeploys.
             </p>
             <Button
               variant="secondary"
@@ -2296,7 +2296,7 @@ function Creative() {
             <div>
               <Kicker>AI MEDIA GENERATION</Kicker>
               <h2 id="creative-media-title">Your saved creations</h2>
-              <p>Private to this browser account · archived for {mediaArchiveDays} days</p>
+              <p>Private to this browser account · temporary archive up to {mediaArchiveDays} days</p>
             </div>
             {mediaGenerating && <span className="creative-media-status" role="status">Creating a refined image from your prompt…</span>}
           </div>
