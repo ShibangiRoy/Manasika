@@ -68,3 +68,22 @@ export function generateCreativeImage(prompt: string) {
 export function deleteCreativeMedia(id: string) {
   return apiRequest<{ deleted: boolean }>(`/api/creative/media/${encodeURIComponent(id)}`, { method: "DELETE" });
 }
+
+export async function getCompanionMemoryReply(message: string) {
+  await startCreativeSession();
+  const result = await apiRequest<{ reply: string | null }>("/api/creative/companion-reply", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ message }),
+  });
+  return result.reply;
+}
+
+export async function saveCreativeInput(medium: "image" | "music" | "story", prompt: string, content = "") {
+  await startCreativeSession();
+  return apiRequest<{ id: string; stored: boolean; createdAt: string }>("/api/creative/inputs", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ medium, prompt, content }),
+  });
+}

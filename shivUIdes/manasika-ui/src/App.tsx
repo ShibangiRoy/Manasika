@@ -3,7 +3,7 @@ import manasikaLogo from "./assets/manasika-logo.webp";
 import { getDatasetReflection } from "./cosmicDataset";
 import { getCompanionDatasetReply } from "./companionDataset";
 import { getCreativePrompt, saveCreativeOutput } from "./creativeDataset";
-import { deleteCreativeMedia, generateCreativeImage, getCreativeMediaStatus, listCreativeMedia, startCreativeSession, type CreativeMediaItem } from "./creativeMediaApi";
+import { deleteCreativeMedia, generateCreativeImage, getCreativeMediaStatus, listCreativeMedia, saveCreativeInput, startCreativeSession, type CreativeMediaItem } from "./creativeMediaApi";
 
 type Page =
   | "home"
@@ -2174,30 +2174,42 @@ function Creative() {
   };
 
   const saveArtwork = async () => {
-    const didSave = await saveCreativeOutput({
+    const [didSave, didPersist] = await Promise.all([
+      saveCreativeOutput({
       kind: "image",
       prompt: artPrompt,
       content: "",
       ...(artworkFile ? { file: artworkFile, fileName: artworkFile.name, mimeType: artworkFile.type } : {}),
-    });
+      }),
+      saveCreativeInput("image", artPrompt).then(() => true).catch(() => false),
+    ]);
     setSaved(didSave);
+    setMediaError(didPersist ? "" : "Saved on this device; the permanent archive is currently unavailable.");
   };
 
   const saveMusicNote = async () => {
     if (!musicNote.trim()) return;
-    const didSave = await saveCreativeOutput({
+    const [didSave, didPersist] = await Promise.all([
+      saveCreativeOutput({
       kind: "music",
       prompt: musicPrompt || musicNote,
       content: musicNote,
       ...(audioFile ? { file: audioFile, fileName: audioFile.name, mimeType: audioFile.type } : {}),
-    });
+      }),
+      saveCreativeInput("music", musicPrompt || musicNote, musicNote).then(() => true).catch(() => false),
+    ]);
     setSaved(didSave);
-    window.alert(didSave ? "Your music note was saved privately." : "This browser could not save the music note.");
+    window.alert(didSave && didPersist ? "Your music note was saved privately." : didSave ? "Saved in this browser; the permanent archive is currently unavailable." : "This browser could not save the music note.");
   };
 
   const saveStory = async () => {
     if (!story.trim()) return;
-    setSaved(await saveCreativeOutput({ kind: "story", prompt: storyPrompt, content: story }));
+    const [didSave, didPersist] = await Promise.all([
+      saveCreativeOutput({ kind: "story", prompt: storyPrompt, content: story }),
+      saveCreativeInput("story", storyPrompt, story).then(() => true).catch(() => false),
+    ]);
+    setSaved(didSave);
+    if (!didPersist) window.alert("Your story is saved in this browser; the permanent archive is currently unavailable.");
   };
   return (
     <div className="page">

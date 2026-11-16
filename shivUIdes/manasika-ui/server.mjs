@@ -1,4 +1,4 @@
-import { createHmac, randomBytes, timingSafeEqual, randomUUID } from "node:crypto";
+import { createHmac, createHash, randomBytes, timingSafeEqual, randomUUID } from "node:crypto";
 import { createServer } from "node:http";
 import { DatabaseSync } from "node:sqlite";
 import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
@@ -61,7 +61,72 @@ database.exec(`
   CREATE INDEX IF NOT EXISTS creative_media_account_created
     ON creative_media(account_id, created_at DESC);
   CREATE INDEX IF NOT EXISTS creative_media_expiry ON creative_media(expires_at);
+  CREATE TABLE IF NOT EXISTS creative_user_inputs (
+    id TEXT PRIMARY KEY,
+    account_id TEXT NOT NULL REFERENCES creative_accounts(id) ON DELETE CASCADE,
+    medium TEXT NOT NULL CHECK (medium IN ('image', 'music', 'story')),
+    prompt TEXT NOT NULL,
+    content TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS creative_inputs_account_created ON creative_user_inputs(account_id, created_at DESC);
+  CREATE TABLE IF NOT EXISTS ai_companion_memory (
+    id INTEGER PRIMARY KEY,
+    prompt TEXT NOT NULL,
+    completion TEXT NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS ai_companion_memory_meta (
+    dataset_key TEXT PRIMARY KEY,
+    sha256 TEXT NOT NULL,
+    row_count INTEGER NOT NULL,
+    updated_at TEXT NOT NULL
+  );
 `);
+
+async function syncCompanionMemory() {
+  let raw;
+  try {
+    raw = await readFile(path.join(distDir, "data", "mental_health_support_chat.json"), "utf8");
+  } catch {
+    console.warn("AI Companion dataset file is unavailable; retaining the current database copy.");
+    return;
+  }
+  let parsed;
+  try { parsed = JSON.parse(raw); } catch {
+    console.error("AI Companion dataset is not valid JSON; retaining the current database copy.");
+    return;
+  }
+  if (!Array.isArray(parsed)) {
+    console.error("AI Companion dataset has an unexpected format; retaining the current database copy.");
+    return;
+  }
+  const pairs = parsed.filter((row) => row && typeof row.enhanced_prompt === "string"
+    && row.enhanced_prompt.trim() && typeof row.enhanced_completion === "string" && row.enhanced_completion.trim());
+  if (!pairs.length) {
+    console.error("AI Companion dataset has no valid prompt/response pairs; retaining the current database copy.");
+    return;
+  }
+  const sha256 = createHash("sha256").update(raw).digest("hex");
+  const current = database.prepare("SELECT sha256 FROM ai_companion_memory_meta WHERE dataset_key = ?").get("mental_health_support_chat");
+  if (current?.sha256 === sha256) return;
+  const insert = database.prepare("INSERT INTO ai_companion_memory(id, prompt, completion) VALUES (?, ?, ?)");
+  database.exec("BEGIN IMMEDIATE");
+  try {
+    database.exec("DELETE FROM ai_companion_memory");
+    pairs.forEach((pair, id) => insert.run(id, pair.enhanced_prompt.trim(), pair.enhanced_completion.trim()));
+    database.prepare(`INSERT INTO ai_companion_memory_meta(dataset_key, sha256, row_count, updated_at)
+      VALUES (?, ?, ?, ?) ON CONFLICT(dataset_key) DO UPDATE SET sha256=excluded.sha256,
+      row_count=excluded.row_count, updated_at=excluded.updated_at`)
+      .run("mental_health_support_chat", sha256, pairs.length, new Date().toISOString());
+    database.exec("COMMIT");
+    console.log(`Loaded ${pairs.length} AI Companion dataset records into persistent memory.`);
+  } catch (error) {
+    database.exec("ROLLBACK");
+    throw error;
+  }
+}
+
+await syncCompanionMemory();
 
 const accountInsert = database.prepare("INSERT OR IGNORE INTO creative_accounts(id, created_at) VALUES (?, ?)");
 const getAccount = database.prepare("SELECT id FROM creative_accounts WHERE id = ?");
@@ -76,6 +141,9 @@ const countRecent = database.prepare(`SELECT COUNT(*) AS count FROM creative_med
   WHERE account_id = ? AND created_at >= ?`);
 const countGlobalRecent = database.prepare("SELECT COUNT(*) AS count FROM creative_media WHERE created_at >= ?");
 const deleteMedia = database.prepare("DELETE FROM creative_media WHERE id = ? AND account_id = ?");
+const insertCreativeInput = database.prepare(`INSERT INTO creative_user_inputs(id, account_id, medium, prompt, content, created_at)
+  VALUES (?, ?, ?, ?, ?, ?)`);
+const listCompanionMemory = database.prepare("SELECT prompt, completion FROM ai_companion_memory");
 
 function signSession(accountId) {
   return createHmac("sha256", sessionSecret).update(accountId).digest("base64url");
@@ -130,6 +198,43 @@ function mediaDto(row) {
     expiresAt: row.expires_at,
     url: `/api/creative/media/${row.id}/file`,
   };
+}
+
+const supportStopWords = new Set("about after again all also and are because been before being but can could did does for from had has have how into its just more most not of on our out she should some than that the their them then there these they this those through too was were what when where which while who why with would you your".split(" "));
+const urgentSupportPattern = /\b(suicid(?:e|al)|kill myself|end my life|want to die|don't want to live|do not want to live|self[- ]harm(?:ed|ing)?|hurt myself|harm myself|overdose|can't keep myself safe|cannot keep myself safe|not safe with myself|kill someone|hurt someone)\b/i;
+const medicalBoundaryPattern = /\b(diagnos(?:e|is|ing)|what do i have|medication|prescription|dosage|side effects)\b/i;
+const urgentSupportReply = "I’m sorry this feels so heavy. I can’t provide emergency support. If you may hurt yourself or someone else now, contact your local emergency number or go to the nearest emergency department. If you can, tell someone you trust and ask them to stay with you. You can also open Professional & crisis support for resources.";
+const medicalBoundaryReply = "I can listen and offer general emotional support, but I can’t diagnose a condition or advise on medication. A licensed healthcare professional can help with those questions. If you’d like, I can help you think of what you want to ask them.";
+
+function companionDatasetReply(message) {
+  if (urgentSupportPattern.test(message)) return urgentSupportReply;
+  if (medicalBoundaryPattern.test(message)) return medicalBoundaryReply;
+  const queryTerms = [...new Set(message.toLowerCase().match(/[a-z]{3,}/g)?.filter((word) => !supportStopWords.has(word)) ?? [])];
+  if (!queryTerms.length) return null;
+  const pairs = listCompanionMemory.all();
+  const termsFor = (value) => value.toLowerCase().match(/[a-z]{3,}/g)?.filter((word) => !supportStopWords.has(word)) ?? [];
+  const docs = pairs.map((pair) => ({ pair, terms: new Set(termsFor(pair.prompt)) }));
+  const weights = new Map(queryTerms.map((term) => [term, Math.log(1 + pairs.length / (1 + docs.reduce((n, doc) => n + Number(doc.terms.has(term)), 0)))]));
+  const queryWeight = [...weights.values()].reduce((sum, weight) => sum + weight, 0) || 1;
+  let best = null;
+  for (const doc of docs) {
+    let score = 0;
+    for (const term of queryTerms) if (doc.terms.has(term)) score += weights.get(term) ?? 0;
+    score /= queryWeight;
+    if (!best || score > best.score) best = { completion: doc.pair.completion, score };
+  }
+  if (!best || best.score < 0.12) return null;
+  const firstParagraph = best.completion.split(/\n\s*\n/)[0].replace(/\s+/g, " ").replace(/[*_`#]/g, "").trim();
+  const sentences = firstParagraph.match(/[^.!?]+[.!?]+|[^.!?]+$/g) ?? [firstParagraph];
+  const selected = [];
+  let words = 0;
+  for (const sentence of sentences) {
+    const count = sentence.trim().split(/\s+/).length;
+    if (words + count > 100) break;
+    selected.push(sentence.trim());
+    words += count;
+  }
+  return selected.join(" ") || sentences[0]?.trim() || null;
 }
 
 async function ensureSession(req) {
@@ -243,8 +348,29 @@ async function handleRequest(req, res) {
     if (req.method === "GET" && pathname === "/api/creative/status") {
       return sendJson(res, 200, { providerConfigured: Boolean(providerKey), model: providerModel, archiveDays: retentionDays, generationLimitPerHour });
     }
+    if (req.method === "POST" && pathname === "/api/creative/companion-reply") {
+      let body;
+      try { body = await readJson(req); } catch (error) { return sendJson(res, 400, { error: error.message }); }
+      const message = typeof body.message === "string" ? body.message.trim() : "";
+      if (!message || message.length > 4000) return sendJson(res, 400, { error: "Enter a message between 1 and 4,000 characters." });
+      return sendJson(res, 200, { reply: companionDatasetReply(message) });
+    }
     if (req.method === "GET" && pathname === "/api/creative/media") {
       return sendJson(res, 200, { items: listMedia.all(accountId).map(mediaDto) });
+    }
+    if (req.method === "POST" && pathname === "/api/creative/inputs") {
+      let body;
+      try { body = await readJson(req, 40_000); } catch (error) { return sendJson(res, 400, { error: error.message }); }
+      const medium = body.medium;
+      const prompt = typeof body.prompt === "string" ? body.prompt.trim() : "";
+      const content = typeof body.content === "string" ? body.content.trim() : "";
+      if (!["image", "music", "story"].includes(medium) || !prompt || prompt.length > 8_000 || content.length > 24_000) {
+        return sendJson(res, 400, { error: "Creative input is incomplete or exceeds the allowed size." });
+      }
+      const id = randomUUID();
+      const createdAt = new Date().toISOString();
+      insertCreativeInput.run(id, accountId, medium, prompt, content, createdAt);
+      return sendJson(res, 201, { id, stored: true, createdAt });
     }
     if (req.method === "POST" && pathname === "/api/creative/generate") {
       return generateImage(req, res, accountId);

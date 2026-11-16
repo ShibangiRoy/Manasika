@@ -1,3 +1,5 @@
+import { getCompanionMemoryReply } from "./creativeMediaApi";
+
 type SupportPair = { enhanced_prompt: string; enhanced_completion: string };
 type StoredSupportPair = SupportPair & { id: number };
 
@@ -118,6 +120,12 @@ function conciseSupportText(completion: string): string {
 export async function getCompanionDatasetReply(message: string): Promise<string | null> {
   if (URGENT_PATTERN.test(message)) return URGENT_REPLY;
   if (MEDICAL_BOUNDARY_PATTERN.test(message)) return MEDICAL_BOUNDARY_REPLY;
+  try {
+    const persistentReply = await getCompanionMemoryReply(message);
+    if (persistentReply) return persistentReply;
+  } catch {
+    // Keep the existing browser-side dataset available when the backend is offline.
+  }
   const pairs = await loadPairs();
   const match = retrieveResponse(message, pairs);
   return match ? conciseSupportText(match.enhanced_completion) : null;
