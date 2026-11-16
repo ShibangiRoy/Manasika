@@ -113,19 +113,6 @@ function topics(value: string): number[] {
   return TOPIC_GROUPS.reduce<number[]>((matches, pattern, index) => pattern.test(normalized) ? [...matches, index] : matches, []);
 }
 
-function followUp(query: string): string {
-  const prompts = [
-    "What part feels most urgent right now?",
-    "What tends to trigger that worry most?",
-    "Would a small comforting action or talking it through feel better right now?",
-    "Which assignment or deadline is weighing on you most?",
-    "What would you like the other person to understand?",
-    "What usually keeps your mind active when you are trying to rest?",
-    "What happened just before that feeling became intense?",
-  ];
-  return prompts[topics(query)[0]] ?? "Which part feels most important to focus on first?";
-}
-
 function retrieveResponse(query: string, pairs: SupportPair[]): SupportPair | null {
   const queryTerms = [...new Set(tokens(query))];
   if (!queryTerms.length) return null;
@@ -155,12 +142,14 @@ function conciseSupportText(completion: string): string {
   const selected: string[] = [];
   let wordCount = 0;
   for (const sentence of sentences) {
-    const count = sentence.trim().split(/\s+/).length;
+    const cleanSentence = sentence.trim();
+    if (!cleanSentence || cleanSentence.includes("?")) continue;
+    const count = cleanSentence.split(/\s+/).length;
     if (wordCount + count > 100) break;
-    selected.push(sentence.trim());
+    selected.push(cleanSentence);
     wordCount += count;
   }
-  return selected.join(" ") || sentences[0]?.trim() || "I’m here to listen. What feels most important for you right now?";
+  return selected.join(" ");
 }
 
 export async function getCompanionDatasetReply(message: string): Promise<string | null> {
@@ -177,6 +166,5 @@ export async function getCompanionDatasetReply(message: string): Promise<string 
   const pairs = await loadPairs();
   const match = retrieveResponse(message, pairs);
   if (!match) return null;
-  const answer = conciseSupportText(match.enhanced_completion);
-  return /[?？]\s*$/.test(answer) ? answer : `${answer} ${followUp(message)}`;
+  return conciseSupportText(match.enhanced_completion) || null;
 }

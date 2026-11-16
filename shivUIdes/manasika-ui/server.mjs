@@ -470,20 +470,6 @@ function companionTopics(value) {
   return companionTopicGroups.reduce((topics, pattern, index) => pattern.test(normalized) ? [...topics, index] : topics, []);
 }
 
-function companionFollowUp(message) {
-  const followUps = [
-    "What part feels most urgent right now?",
-    "What tends to trigger that worry most?",
-    "Would a small comforting action or talking it through feel better right now?",
-    "Which assignment or deadline is weighing on you most?",
-    "What would you like the other person to understand?",
-    "What usually keeps your mind active when you are trying to rest?",
-    "What happened just before that feeling became intense?",
-  ];
-  const topic = companionTopics(message)[0];
-  return followUps[topic] ?? "Which part feels most important to focus on first?";
-}
-
 const classicLiteratureIntent = /\b(book|novel|story|stories|character|plot|chapter|literature|fiction|poem|white nights|metamorphosis|dostoevsky|dostoyevsky|kafka|gregor samsa|nastenka)\b/i;
 const psychologyLearningIntent = /\b(psycholog(?:y|ical)|perception|conditioning|psychometrics|intelligence|personality|heredity|developmental|social psychology|eysenck|textbook)\b/i;
 const clinicalPersonalIntent = /\b(i feel|i'm feeling|i am feeling|my anxiety|my depression|my mood|i have anxiety|i have depression|help me cope|what should i do|i am struggling|i'm struggling)\b/i;
@@ -509,7 +495,13 @@ function companionLiteratureReply(message, sourceKind) {
     if (!best || score > best.score) best = { doc, score };
   }
   if (!best || best.score < 0.32) return null;
-  const words = best.doc.row.content.replace(/\s+/g, " ").match(/[^\s]+/g) ?? [];
+  const rankedSentences = best.doc.row.content.replace(/\s+/g, " ").match(/[^.!?]+[.!?]+|[^.!?]+$/g) ?? [];
+  const queryTermsSet = new Set(queryTerms);
+  const sentence = rankedSentences
+    .filter((candidate) => candidate.trim() && !candidate.includes("?"))
+    .map((candidate) => ({ candidate: candidate.trim(), matched: companionTerms(candidate).filter((term) => queryTermsSet.has(term)).length }))
+    .sort((left, right) => right.matched - left.matched)[0]?.candidate;
+  const words = sentence?.match(/[^\s]+/g) ?? [];
   const excerpt = words.slice(0, 25).join(" ").replace(/^[^A-Za-z0-9]+/, "").replace(/[^A-Za-z0-9.!?]+$/, "");
   if (!excerpt) return null;
   const row = best.doc.row;
@@ -517,7 +509,7 @@ function companionLiteratureReply(message, sourceKind) {
   if (sourceKind === "psychology_reference") {
     return `A historical psychology reference from ${row.author}, ${row.title}${location}: “${excerpt}” This 1976 text is educational context, not current clinical guidance.`;
   }
-  return `In ${row.title} by ${row.author}${location}: “${excerpt}” Would you like to explore this passage, the character, or the larger theme?`;
+  return `In ${row.title} by ${row.author}${location}, the passage most relevant to your question states: “${excerpt}”`;
 }
 
 function companionDatasetReply(message) {
@@ -565,13 +557,14 @@ function companionDatasetReply(message) {
   const selected = [];
   let words = 0;
   for (const sentence of sentences) {
-    const count = sentence.trim().split(/\s+/).length;
+    const cleanSentence = sentence.trim();
+    if (!cleanSentence || cleanSentence.includes("?")) continue;
+    const count = cleanSentence.split(/\s+/).length;
     if (words + count > 100) break;
-    selected.push(sentence.trim());
+    selected.push(cleanSentence);
     words += count;
   }
-  const answer = selected.join(" ") || sentences[0]?.trim() || "";
-  return answer && !/[?？]\s*$/.test(answer) ? `${answer} ${companionFollowUp(message)}` : answer || null;
+  return selected.join(" ") || null;
 }
 
 async function ensureSession(req) {

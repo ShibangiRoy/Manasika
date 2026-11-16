@@ -2524,7 +2524,7 @@ function Companion({ setPage, profile }: { setPage: (p: Page) => void; profile: 
     {
       id: "welcome",
       from: "ai",
-      text: `Hi${profile.name ? ` ${profile.name}` : ""}. I’m here to help you think things through—not to judge or diagnose. What feels most present today?`,
+      text: `Hi${profile.name ? ` ${profile.name}` : ""}. I’m here to help you think things through—not to judge or diagnose. Share what feels present, and I’ll respond directly and with care.`,
     },
   ]);
   const [text, setText] = useState("");
@@ -2538,8 +2538,11 @@ function Companion({ setPage, profile }: { setPage: (p: Page) => void; profile: 
       { id: replyId, from: "ai", text: "Let me think this through with care…" },
     ]);
     setText("");
-    const quotedQuestion = message.length > 160 ? `${message.slice(0, 157).trimEnd()}…` : message;
-    const fallback = `I want to respond to “${quotedQuestion}” specifically, and I’m not finding a close enough match yet. What part of this would you most like help with?`;
+    const literatureQuestion = /\b(book|novel|story|stories|character|plot|chapter|literature|fiction|poem|white nights|metamorphosis|dostoevsky|dostoyevsky|kafka|gregor samsa|nastenka|psycholog(?:y|ical)|perception|conditioning|psychometrics|intelligence|personality|heredity|developmental|social psychology|eysenck|textbook)\b/i.test(message)
+      && !/\b(i feel|i'm feeling|i am feeling|my anxiety|my depression|my mood|i have anxiety|i have depression|help me cope|what should i do|i am struggling|i'm struggling)\b/i.test(message);
+    const fallback = literatureQuestion
+      ? "I couldn't retrieve a reliable passage from the literature memory for this question, so I won't invent an answer."
+      : "I couldn't find a close match in my support memory, so I won't guess. For now, take one slow exhale, name the main pressure, and choose one small step you can finish in five minutes.";
     const reply = await getCompanionDatasetReply(message).catch(() => null);
     setMessages((items) => items.map((item) => item.id === replyId ? { ...item, text: reply || fallback } : item));
   };
