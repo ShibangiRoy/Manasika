@@ -2750,6 +2750,84 @@
   font-size: 11px;
   line-height: 1.7;
 }
+.creative-media-status {
+  color: var(--ink-soft);
+  font-size: 10px;
+  line-height: 1.6;
+}
+.creative-media-section {
+  margin-top: 18px;
+  padding: 22px;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+}
+.creative-media-heading {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 18px;
+  margin-bottom: 16px;
+}
+.creative-media-heading h2 {
+  margin: 7px 0 3px;
+  font-size: 25px;
+}
+.creative-media-heading p,
+.creative-media-card small {
+  color: var(--ink-soft);
+  font-size: 9px;
+  line-height: 1.6;
+}
+.creative-media-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+.creative-media-card {
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 15px;
+  background: var(--paper);
+}
+.creative-media-card img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: cover;
+  background: var(--warm);
+}
+.creative-media-card > div {
+  padding: 12px;
+}
+.creative-media-card p {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+  margin: 7px 0 10px;
+  color: var(--ink);
+  font-size: 10px;
+  line-height: 1.6;
+}
+.creative-media-card button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--ink-soft);
+  font-size: 9px;
+}
+.creative-media-empty {
+  display: flex;
+  min-height: 96px;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  border: 1px dashed var(--line);
+  border-radius: 14px;
+  color: var(--ink-soft);
+  font-size: 10px;
+}
 .story-editor {
   display: flex;
   flex-direction: column;
@@ -3788,6 +3866,16 @@
   .creative-prompt {
     margin-top: 15px;
     min-height: 310px;
+  }
+  .creative-media-section {
+    padding: 17px;
+  }
+  .creative-media-grid {
+    grid-template-columns: 1fr;
+  }
+  .creative-media-heading {
+    align-items: flex-start;
+    flex-direction: column;
   }
   .creation-actions {
     gap: 10px;

@@ -3,6 +3,7 @@ import manasikaLogo from "./assets/manasika-logo.webp";
 import { getDatasetReflection } from "./cosmicDataset";
 import { getCompanionDatasetReply } from "./companionDataset";
 import { getCreativePrompt, saveCreativeOutput } from "./creativeDataset";
+import { deleteCreativeMedia, generateCreativeImage, getCreativeMediaStatus, listCreativeMedia, startCreativeSession, type CreativeMediaItem } from "./creativeMediaApi";
 
 type Page =
   | "home"
@@ -2097,6 +2098,12 @@ function Creative() {
   const [storyPrompt, setStoryPrompt] = useState("Write about the version of you who kept going.");
   const [artworkFile, setArtworkFile] = useState<File | null>(null);
   const [audioFile, setAudioFile] = useState<File | null>(null);
+  const [mediaItems, setMediaItems] = useState<CreativeMediaItem[]>([]);
+  const [mediaConfigured, setMediaConfigured] = useState(false);
+  const [mediaAvailable, setMediaAvailable] = useState(false);
+  const [mediaArchiveDays, setMediaArchiveDays] = useState(30);
+  const [mediaGenerating, setMediaGenerating] = useState(false);
+  const [mediaError, setMediaError] = useState("");
 
   useEffect(() => {
     let active = true;
@@ -2116,6 +2123,23 @@ function Creative() {
     return () => { active = false; };
   }, []);
 
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      await startCreativeSession();
+      const [status, items] = await Promise.all([getCreativeMediaStatus(), listCreativeMedia()]);
+      if (!active) return;
+      setMediaAvailable(true);
+      setMediaConfigured(status.providerConfigured);
+      setMediaArchiveDays(status.archiveDays);
+      setMediaItems(items);
+      if (!status.providerConfigured) setMediaError("Image generation needs a server-side provider key.");
+    })().catch(() => {
+      if (active) setMediaError("The media backend is not connected to this site yet.");
+    });
+    return () => { active = false; };
+  }, []);
+
   const createNextArtPrompt = () => {
     const nextIndex = artPromptIndex + 1;
     setArtPromptIndex(nextIndex);
@@ -2124,6 +2148,29 @@ function Creative() {
       if (prompt) setArtPrompt(prompt);
       else setArtPrompt(artPrompts[nextIndex % artPrompts.length]);
     });
+  };
+
+  const generateMedia = async () => {
+    if (!mediaConfigured || mediaGenerating || !artPrompt.trim()) return;
+    setMediaGenerating(true);
+    setMediaError("");
+    try {
+      const item = await generateCreativeImage(artPrompt);
+      setMediaItems((items) => [item, ...items.filter((existing) => existing.id !== item.id)]);
+    } catch (error) {
+      setMediaError(error instanceof Error ? error.message : "The image could not be generated. Please try again.");
+    } finally {
+      setMediaGenerating(false);
+    }
+  };
+
+  const removeMedia = async (item: CreativeMediaItem) => {
+    try {
+      await deleteCreativeMedia(item.id);
+      setMediaItems((items) => items.filter((existing) => existing.id !== item.id));
+    } catch (error) {
+      setMediaError(error instanceof Error ? error.message : "This image could not be removed.");
+    }
   };
 
   const saveArtwork = async () => {
@@ -2180,6 +2227,7 @@ function Creative() {
         ))}
       </div>
       {tab === "My Art" && (
+        <>
         <div className="creative-layout">
           <section className="creation-card">
             <div className="canvas">
@@ -2217,7 +2265,7 @@ function Creative() {
               />
             </label>
             <p>
-              It can be messy, unfinished, abstract, or quiet. It only needs to feel like yours.
+              It can be messy, unfinished, abstract, or quiet. Prompts are sent to the image service; generated images are archived privately for 30 days.
             </p>
             <Button
               variant="secondary"
@@ -2225,8 +2273,39 @@ function Creative() {
             >
               New prompt
             </Button>
+            <Button onClick={generateMedia} disabled={!mediaAvailable || !mediaConfigured || mediaGenerating} icon="spark">
+              {mediaGenerating ? "Creating your image…" : "Generate AI image"}
+            </Button>
+            {mediaError && <p className="creative-media-status" role="status">{mediaError}</p>}
           </aside>
         </div>
+        <section className="creative-media-section" aria-labelledby="creative-media-title">
+          <div className="creative-media-heading">
+            <div>
+              <Kicker>AI MEDIA GENERATION</Kicker>
+              <h2 id="creative-media-title">Your saved creations</h2>
+              <p>Private to this browser account · archived for {mediaArchiveDays} days</p>
+            </div>
+            {mediaGenerating && <span className="creative-media-status" role="status">Creating a refined image from your prompt…</span>}
+          </div>
+          {mediaItems.length ? (
+            <div className="creative-media-grid">
+              {mediaItems.map((item) => (
+                <article className="creative-media-card" key={item.id}>
+                  <img src={item.url} alt={`Generated artwork: ${item.prompt.slice(0, 120)}`} loading="lazy" />
+                  <div>
+                    <small>{new Date(item.createdAt).toLocaleString()} · {item.model}</small>
+                    <p>{item.prompt}</p>
+                    <button type="button" onClick={() => removeMedia(item)} aria-label="Delete saved image"><Icon name="trash" /> Remove</button>
+                  </div>
+                </article>
+              ))}
+            </div>
+          ) : (
+            <div className="creative-media-empty"><Icon name="spark" /><p>Generated images will appear here after your first creation.</p></div>
+          )}
+        </section>
+        </>
       )}
       {tab === "My Music" && (
         <div className="creative-layout">

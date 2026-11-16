@@ -56,7 +56,30 @@ The supplied mental health support chat file is copied to `shivUIdes/manasika-ui
 
 ## Creative Space data
 
-The supplied media-generation prompt dataset is served from `shivUIdes/manasika-ui/public/data/ai_media_generation_prompts.json`. Creative Space validates and stores the source records plus curated image, music, and story prompts in the browser's versioned `manasika-creative-space-memory` IndexedDB database. Saved text and optional uploaded media files are stored locally in that database. No user media is sent to a remote service. The current prototype has no image, audio, or text generation provider, so it prepares dataset-backed prompts and saves creative output locally; it does not train a generative model.
+The supplied media-generation prompt dataset is served from `shivUIdes/manasika-ui/public/data/ai_media_generation_prompts.json`. Creative Space validates and stores the source records plus curated image, music, and story prompts in the browser's versioned `manasika-creative-space-memory` IndexedDB database. The image-generation area sends the prompt to the server-side Pollinations image API and archives returned image files and metadata in a SQLite database. Media is scoped to a signed anonymous browser session and expires after 30 days by default. Clearing cookies or changing browser/device creates a separate archive; this is not tied to an authenticated Manasika login because the app does not yet have account authentication. The provider key stays on the server and must never be put in frontend code. This integration uses runtime generation, not model fine-tuning.
+
+### Run the media backend locally
+
+The development UI proxies `/api` requests to the local media server. Use two terminals from `shivUIdes/manasika-ui`:
+
+```powershell
+npm ci
+Copy-Item .env.example .env
+# Edit .env and set POLLINATIONS_API_KEY and a long random MEDIA_SESSION_SECRET
+npm run server
+```
+
+In the second terminal:
+
+```powershell
+npm run dev -- --host 0.0.0.0 --port 4173
+```
+
+Open [http://localhost:4173](http://localhost:4173). For a production-style local run, build first and then use `npm start`; the server serves both `dist/` and the API on port 4174 by default. `HOST`, `PORT`, `MANASIKA_MEDIA_DATA_DIR`, `MEDIA_RETENTION_DAYS`, `MEDIA_GENERATIONS_PER_HOUR`, and `MEDIA_GLOBAL_GENERATIONS_PER_HOUR` can be configured in `.env`. Generated files and SQLite data live in `data/`, which is ignored by Git. Keep a durable mounted volume at the configured data path if deploying the backend in a container.
+
+The app expects a Pollinations image API key configured as `POLLINATIONS_API_KEY`; generation remains disabled until configured. Set it only as a server environment secret. The default model is `black-forest-labs/flux.1-schnell`; override with `POLLINATIONS_IMAGE_MODEL` if needed. See the [Pollinations image API documentation](https://github.com/pollinations/pollinations/blob/main/gen.pollinations.ai/src/docs/image-generation.md) and [API docs](https://gen.pollinations.ai/docs).
+
+`Dockerfile` builds and serves the UI and API together. The current `render.yaml` still deploys a static site, so the public Render URL does not provide this new API or archive yet. To make generation available publicly, deploy the Docker image as a Node/container web service and attach persistent storage at `/app/data`; configure `POLLINATIONS_API_KEY` and `MEDIA_SESSION_SECRET` in the host's secret settings. Do not expect generated media to persist on ephemeral container storage.
 
 ## Feature and data boundaries
 
