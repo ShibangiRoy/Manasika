@@ -653,7 +653,19 @@ async function generateImage(req, res, accountId) {
   } catch {
     return sendJson(res, 502, { error: "The image service could not be reached. Please try again." });
   }
-  if (!response.ok) return sendJson(res, 502, { error: "The image service could not complete this request. Check the provider key and model settings." });
+  if (!response.ok) {
+    console.warn(`Pollinations image request failed with HTTP ${response.status}.`);
+    const providerErrors = {
+      401: "Pollinations rejected the server key. Use an active secret key beginning with sk_; an app key beginning with pk_ cannot authenticate generation requests.",
+      402: "Pollinations reports that this key or account has no image-generation budget remaining.",
+      403: `This Pollinations key is not allowed to use ${providerModel}. Enable image generation or allow this model in the key settings.`,
+      404: `Pollinations could not find image model ${providerModel}. Check POLLINATIONS_IMAGE_MODEL.`,
+      429: "Pollinations rate-limited this image request. Wait briefly, then try again.",
+    };
+    return sendJson(res, 502, {
+      error: providerErrors[response.status] || `Pollinations image generation failed (HTTP ${response.status}). Check the provider status and key permissions.`,
+    });
+  }
 
   const mimeType = response.headers.get("content-type")?.split(";")[0]?.toLowerCase() || "";
   const extension = mimeType === "image/png" ? ".png" : mimeType === "image/webp" ? ".webp" : mimeType === "image/jpeg" ? ".jpg" : "";
