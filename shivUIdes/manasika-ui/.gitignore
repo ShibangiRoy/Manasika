@@ -5,6 +5,10 @@ build/
 .env*
 !.env.example
 data/
+!public/data/
+public/data/*
+!public/data/datasets/
+!public/data/datasets/**
 .vite/
 vite.config.*.timestamp-*
 *.tsbuildinfo

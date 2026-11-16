@@ -2,6 +2,8 @@ import { createHmac, createHash, randomBytes, timingSafeEqual, randomUUID } from
 import { createServer } from "node:http";
 import { DatabaseSync } from "node:sqlite";
 import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { createReadStream } from "node:fs";
+import { createGunzip } from "node:zlib";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -81,7 +83,175 @@ database.exec(`
     row_count INTEGER NOT NULL,
     updated_at TEXT NOT NULL
   );
+  CREATE TABLE IF NOT EXISTS ai_companion_external_memory (
+    dataset_key TEXT NOT NULL,
+    record_id INTEGER NOT NULL,
+    prompt TEXT NOT NULL,
+    completion TEXT NOT NULL,
+    support_eligible INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY(dataset_key, record_id)
+  );
+  CREATE INDEX IF NOT EXISTS ai_companion_external_support ON ai_companion_external_memory(dataset_key, support_eligible);
+  CREATE TABLE IF NOT EXISTS creative_dataset_records (
+    dataset_key TEXT NOT NULL,
+    record_id INTEGER NOT NULL,
+    medium TEXT NOT NULL CHECK (medium IN ('image', 'music', 'story')),
+    prompt TEXT NOT NULL,
+    completion TEXT NOT NULL DEFAULT '',
+    PRIMARY KEY(dataset_key, record_id)
+  );
+  CREATE INDEX IF NOT EXISTS creative_dataset_medium ON creative_dataset_records(medium, dataset_key);
+  CREATE TABLE IF NOT EXISTS creative_dataset_meta (
+    dataset_key TEXT PRIMARY KEY,
+    sha256 TEXT NOT NULL,
+    row_count INTEGER NOT NULL,
+    updated_at TEXT NOT NULL
+  );
 `);
+
+const creativeDatasetFiles = [
+  { key: "creative_story_narratives", medium: "image", file: "creative_story_narratives.json" },
+  { key: "image_gen_data_engineering", medium: "music", file: "image_gen_data_engineering.json" },
+  { key: "lyric_generation_prompts", medium: "story", file: "lyric_generation_prompts.json" },
+];
+
+async function syncCreativeDatasetFiles() {
+  const insert = database.prepare(`INSERT INTO creative_dataset_records(dataset_key, record_id, medium, prompt, completion)
+    VALUES (?, ?, ?, ?, ?)`);
+  const updateMeta = database.prepare(`INSERT INTO creative_dataset_meta(dataset_key, sha256, row_count, updated_at)
+    VALUES (?, ?, ?, ?) ON CONFLICT(dataset_key) DO UPDATE SET sha256=excluded.sha256,
+    row_count=excluded.row_count, updated_at=excluded.updated_at`);
+  for (const source of creativeDatasetFiles) {
+    const filePath = path.join(distDir, "data", "datasets", "creative_space", source.file);
+    let raw;
+    try { raw = await readFile(filePath, "utf8"); } catch {
+      console.warn(`Creative dataset ${source.file} is unavailable; retaining the current database copy.`);
+      continue;
+    }
+    const sha256 = createHash("sha256").update(raw).digest("hex");
+    const current = database.prepare("SELECT sha256 FROM creative_dataset_meta WHERE dataset_key = ?").get(source.key);
+    if (current?.sha256 === sha256) continue;
+    let rows;
+    try { rows = JSON.parse(raw); } catch {
+      console.error(`Creative dataset ${source.file} is not valid JSON; retaining the current database copy.`);
+      continue;
+    }
+    if (!Array.isArray(rows)) {
+      console.error(`Creative dataset ${source.file} has an unexpected format; retaining the current database copy.`);
+      continue;
+    }
+    const valid = rows.filter((row) => row && typeof row.enhanced_prompt === "string" && row.enhanced_prompt.trim());
+    if (!valid.length) {
+      console.error(`Creative dataset ${source.file} has no valid prompts; retaining the current database copy.`);
+      continue;
+    }
+    database.exec("BEGIN IMMEDIATE");
+    try {
+      database.prepare("DELETE FROM creative_dataset_records WHERE dataset_key = ?").run(source.key);
+      valid.forEach((row, id) => insert.run(source.key, id, source.medium, row.enhanced_prompt.trim(), typeof row.enhanced_completion === "string" ? row.enhanced_completion : ""));
+      updateMeta.run(source.key, sha256, valid.length, new Date().toISOString());
+      database.exec("COMMIT");
+      console.log(`Loaded ${valid.length} ${source.medium} prompts into persistent Creative Space data.`);
+    } catch (error) {
+      database.exec("ROLLBACK");
+      throw error;
+    }
+  }
+}
+
+const supportTopicPattern = /\b(mental health|mental illness|anxiety|anxious|depress(?:ed|ion|ive)?|trauma|suicid|self[- ]harm|eating disorder|binge eating|panic attack|grief|loneliness|lonely|therapy|therapist|coping|emotion(?:al)?|hopelessness|burnout)\b/i;
+const supportRequestPattern = /\b(i am|i'm|i've|i have|my |we |our |how can i|what can i do|i feel|i'm feeling|i want to|i need help)\b/i;
+const supportExclusionPattern = /\b(SEC|short[- ]selling|great depression|clinical case|diagnos(?:e|is|tic)|prescrib|medication|dosage|medical consultant|medical professional|act as (?:a|an) (?:doctor|expert|consultant)|research paper|legal implications)\b/i;
+const supportResponseSafetyPattern = /\b(dosage|prescribe|prescription|stop taking|start taking|you have (?:bipolar|depression)|you are (?:bipolar|depressed)|diagnos(?:e|is)|suicide method|ways to kill|how to hurt yourself)\b/i;
+function supportEligible(prompt, completion) {
+  return prompt.length > 0 && completion.length > 0 && prompt.length <= 12_000 && completion.length <= 250_000
+    && supportTopicPattern.test(prompt) && supportRequestPattern.test(prompt) && !supportExclusionPattern.test(prompt)
+    && !supportResponseSafetyPattern.test(completion);
+}
+
+async function* readJsonArrayItems(readable) {
+  let buffer = "";
+  let started = false;
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  for await (const chunk of readable) {
+    const text = typeof chunk === "string" ? chunk : chunk.toString("utf8");
+    for (const character of text) {
+      if (!started) {
+        if (character === "[") started = true;
+        continue;
+      }
+      if (depth === 0 && character === "]") {
+        if (buffer.trim()) yield JSON.parse(buffer.trim());
+        return;
+      }
+      if (depth === 0 && character === ",") {
+        if (buffer.trim()) yield JSON.parse(buffer.trim());
+        buffer = "";
+        continue;
+      }
+      buffer += character;
+      if (buffer.length > 2_000_000) throw new Error("A dataset record exceeds the 2 MB import limit.");
+      if (inString) {
+        if (escaped) escaped = false;
+        else if (character === "\\") escaped = true;
+        else if (character === '"') inString = false;
+      } else if (character === '"') inString = true;
+      else if (character === "{" || character === "[") depth++;
+      else if (character === "}" || character === "]") depth--;
+    }
+  }
+  if (buffer.trim()) yield JSON.parse(buffer.trim());
+}
+
+async function datasetFileHash(filePath) {
+  const hash = createHash("sha256");
+  for await (const chunk of createReadStream(filePath)) hash.update(chunk);
+  return hash.digest("hex");
+}
+
+async function syncAugmentedCompanionDataset() {
+  const datasetKey = "mental_health_support_chat_augmented";
+  const filePath = path.join(distDir, "data", "datasets", "ai_companion", "mental_health_support_chat_augmented.json.gz");
+  let sha256;
+  try { sha256 = await datasetFileHash(filePath); } catch {
+    console.warn("Augmented AI Companion dataset is unavailable; retaining the current database copy.");
+    return;
+  }
+  const current = database.prepare("SELECT sha256 FROM ai_companion_memory_meta WHERE dataset_key = ?").get(datasetKey);
+  if (current?.sha256 === sha256) return;
+  const insert = database.prepare(`INSERT INTO ai_companion_external_memory
+    (dataset_key, record_id, prompt, completion, support_eligible) VALUES (?, ?, ?, ?, ?)`);
+  let rowCount = 0;
+  let eligibleCount = 0;
+  database.exec("BEGIN IMMEDIATE");
+  try {
+    database.prepare("DELETE FROM ai_companion_external_memory WHERE dataset_key = ?").run(datasetKey);
+    const compressed = createReadStream(filePath).pipe(createGunzip());
+    compressed.setEncoding("utf8");
+    for await (const row of readJsonArrayItems(compressed)) {
+      if (!row || typeof row.enhanced_prompt !== "string" || typeof row.enhanced_completion !== "string") continue;
+      const prompt = row.enhanced_prompt.trim();
+      const completion = row.enhanced_completion.trim();
+      if (!prompt || !completion) continue;
+      const eligible = supportEligible(prompt, completion);
+      insert.run(datasetKey, rowCount, prompt, completion, Number(eligible));
+      rowCount++;
+      eligibleCount += Number(eligible);
+    }
+    if (!rowCount) throw new Error("Augmented AI Companion dataset contained no valid records.");
+    database.prepare(`INSERT INTO ai_companion_memory_meta(dataset_key, sha256, row_count, updated_at)
+      VALUES (?, ?, ?, ?) ON CONFLICT(dataset_key) DO UPDATE SET sha256=excluded.sha256,
+      row_count=excluded.row_count, updated_at=excluded.updated_at`)
+      .run(datasetKey, sha256, rowCount, new Date().toISOString());
+    database.exec("COMMIT");
+    console.log(`Stored ${rowCount} augmented AI Companion records; ${eligibleCount} passed the mental-health support filter.`);
+  } catch (error) {
+    database.exec("ROLLBACK");
+    throw error;
+  }
+}
 
 async function syncCompanionMemory() {
   let raw;
@@ -127,6 +297,8 @@ async function syncCompanionMemory() {
 }
 
 await syncCompanionMemory();
+await syncCreativeDatasetFiles();
+await syncAugmentedCompanionDataset();
 
 const accountInsert = database.prepare("INSERT OR IGNORE INTO creative_accounts(id, created_at) VALUES (?, ?)");
 const getAccount = database.prepare("SELECT id FROM creative_accounts WHERE id = ?");
@@ -144,6 +316,8 @@ const deleteMedia = database.prepare("DELETE FROM creative_media WHERE id = ? AN
 const insertCreativeInput = database.prepare(`INSERT INTO creative_user_inputs(id, account_id, medium, prompt, content, created_at)
   VALUES (?, ?, ?, ?, ?, ?)`);
 const listCompanionMemory = database.prepare("SELECT prompt, completion FROM ai_companion_memory");
+const getAugmentedCompanionCompletion = database.prepare(`SELECT completion FROM ai_companion_external_memory
+  WHERE dataset_key = ? AND record_id = ? AND support_eligible = 1`);
 
 function signSession(accountId) {
   return createHmac("sha256", sessionSecret).update(accountId).digest("base64url");
@@ -213,7 +387,15 @@ function companionDatasetReply(message) {
   if (!queryTerms.length) return null;
   const pairs = listCompanionMemory.all();
   const termsFor = (value) => value.toLowerCase().match(/[a-z]{3,}/g)?.filter((word) => !supportStopWords.has(word)) ?? [];
-  const docs = pairs.map((pair) => ({ pair, terms: new Set(termsFor(pair.prompt)) }));
+  const likeTerms = queryTerms.slice(0, 12);
+  const augmentedDocs = database.prepare(`SELECT record_id, prompt FROM ai_companion_external_memory
+    WHERE dataset_key = ? AND support_eligible = 1 AND (${likeTerms.map(() => "prompt LIKE ?").join(" OR ")}) LIMIT 250`)
+    .all("mental_health_support_chat_augmented", ...likeTerms.map((term) => `%${term}%`))
+    .map((row) => ({ recordId: row.record_id, prompt: row.prompt, augmented: true, terms: new Set(termsFor(row.prompt)) }));
+  const docs = [
+    ...pairs.map((pair) => ({ pair, prompt: pair.prompt, augmented: false, terms: new Set(termsFor(pair.prompt)) })),
+    ...augmentedDocs,
+  ];
   const weights = new Map(queryTerms.map((term) => [term, Math.log(1 + pairs.length / (1 + docs.reduce((n, doc) => n + Number(doc.terms.has(term)), 0)))]));
   const queryWeight = [...weights.values()].reduce((sum, weight) => sum + weight, 0) || 1;
   let best = null;
@@ -221,10 +403,14 @@ function companionDatasetReply(message) {
     let score = 0;
     for (const term of queryTerms) if (doc.terms.has(term)) score += weights.get(term) ?? 0;
     score /= queryWeight;
-    if (!best || score > best.score) best = { completion: doc.pair.completion, score };
+    if (!best || score > best.score) best = { doc, score };
   }
   if (!best || best.score < 0.12) return null;
-  const firstParagraph = best.completion.split(/\n\s*\n/)[0].replace(/\s+/g, " ").replace(/[*_`#]/g, "").trim();
+  const completion = best.doc.augmented
+    ? getAugmentedCompanionCompletion.get("mental_health_support_chat_augmented", best.doc.recordId)?.completion
+    : best.doc.pair.completion;
+  if (!completion) return null;
+  const firstParagraph = completion.split(/\n\s*\n/)[0].replace(/\s+/g, " ").replace(/[*_`#]/g, "").trim();
   const sentences = firstParagraph.match(/[^.!?]+[.!?]+|[^.!?]+$/g) ?? [firstParagraph];
   const selected = [];
   let words = 0;

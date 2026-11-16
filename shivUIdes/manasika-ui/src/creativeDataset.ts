@@ -1,6 +1,6 @@
 export type CreativeMedium = "image" | "music" | "story";
 
-type SourceRow = { enhanced_prompt: string; enhanced_completion: string };
+type SourceRow = { enhanced_prompt: string; enhanced_completion: string; medium: CreativeMedium };
 type CreativePrompt = { id: string; kind: CreativeMedium; prompt: string; sourcePrompt: string };
 type SavedCreativeOutput = {
   id: string;
@@ -15,8 +15,13 @@ type SavedCreativeOutput = {
 
 const DB_NAME = "manasika-creative-space-memory";
 const DB_VERSION = 2;
-const DATASET_VERSION = "ai-media-generation-prompts-2026-11-15-v2";
-const DATASET_URL = `${import.meta.env.BASE_URL}data/ai_media_generation_prompts.json`;
+const DATASET_VERSION = "creative-space-datasets-2026-11-16-v3";
+const LEGACY_DATASET_URL = `${import.meta.env.BASE_URL}data/ai_media_generation_prompts.json`;
+const DATASET_FILES: Record<CreativeMedium, string> = {
+  image: `${import.meta.env.BASE_URL}data/datasets/creative_space/creative_story_narratives.json`,
+  music: `${import.meta.env.BASE_URL}data/datasets/creative_space/image_gen_data_engineering.json`,
+  story: `${import.meta.env.BASE_URL}data/datasets/creative_space/lyric_generation_prompts.json`,
+};
 const EXCLUDED_META = /\b(explain|analysis|analy[sz]e|critique|technical guide|methodology|workflow|architecture|security|policy|audit|evaluate|compare|comparison|research|strategy|prompt injection|implementation)\b/i;
 
 const mediaIntent: Record<CreativeMedium, RegExp> = {
@@ -44,13 +49,65 @@ function openDatabase(): Promise<IDBDatabase> {
 }
 
 async function fetchPrompts(): Promise<CreativePrompt[]> {
-  const response = await fetch(DATASET_URL);
-  if (!response.ok) throw new Error(`Creative dataset request failed (${response.status}).`);
+  const datasets = await Promise.all((Object.keys(DATASET_FILES) as CreativeMedium[]).map(async (medium) => {
+    const response = await fetch(DATASET_FILES[medium]);
+    if (!response.ok) throw new Error(`Creative dataset request failed (${response.status}).`);
+    const data: unknown = await response.json();
+    if (!Array.isArray(data)) throw new Error(`Creative dataset for ${medium} has an unexpected format.`);
+    return {
+      medium,
+      rows: data.filter((row): row is { enhanced_prompt: string; enhanced_completion?: unknown } =>
+        !!row && typeof row.enhanced_prompt === "string" && row.enhanced_prompt.trim().length > 0,
+      ).map((row) => ({
+        enhanced_prompt: row.enhanced_prompt,
+        enhanced_completion: typeof row.enhanced_completion === "string" ? row.enhanced_completion : "",
+      })),
+    };
+  }));
+  const prompts: CreativePrompt[] = [];
+  sourceRows = [];
+  datasets.forEach(({ medium, rows }) => rows.forEach((row, index) => {
+    const sourcePrompt = row.enhanced_prompt.trim();
+    const prompt = formatDatasetPrompt(sourcePrompt, row.enhanced_completion, medium);
+    sourceRows.push({ enhanced_prompt: sourcePrompt, enhanced_completion: "", medium });
+    prompts.push({ id: `${medium}-${index}`, kind: medium, prompt, sourcePrompt });
+  }));
+  return prompts;
+}
+
+function formatDatasetPrompt(sourcePrompt: string, completion: string, kind: CreativeMedium): string {
+  const base = extractStructuredPrompt(completion) || extractGeneratedPrompt(completion, kind) || sourcePrompt;
+  if (kind === "image") {
+    return `Create a polished visual artwork inspired by this story idea: ${base}. Use a clear focal point, thoughtful composition, refined lighting, and a cohesive palette.`;
+  }
+  if (kind === "music") {
+    return `Create an original music concept inspired by this creative brief: ${base}. Describe the mood, instrumentation, tempo, and dynamics clearly.`;
+  }
+  return `Write an original story inspired by this lyric-generation idea: ${base}. Give it a vivid setting, a distinct voice, and a thoughtful ending.`;
+}
+
+function extractStructuredPrompt(completion: string): string {
+  try {
+    const parsed: unknown = JSON.parse(completion.trim());
+    if (!parsed || typeof parsed !== "object") return "";
+    const record = parsed as Record<string, unknown>;
+    for (const key of ["prompt", "user_prompt", "image_prompt", "lyrics_prompt", "story_prompt"] as const) {
+      if (typeof record[key] === "string" && record[key].trim()) return record[key].trim();
+    }
+  } catch {
+    // The dataset also contains Markdown and prose completions.
+  }
+  return "";
+}
+
+async function fetchLegacyPrompts(): Promise<CreativePrompt[]> {
+  const response = await fetch(LEGACY_DATASET_URL);
+  if (!response.ok) throw new Error(`Legacy creative dataset request failed (${response.status}).`);
   const data: unknown = await response.json();
-  if (!Array.isArray(data)) throw new Error("Creative dataset has an unexpected format.");
-  sourceRows = data.filter((row): row is SourceRow =>
+  if (!Array.isArray(data)) throw new Error("Legacy creative dataset has an unexpected format.");
+  sourceRows = data.filter((row): row is Omit<SourceRow, "medium"> =>
     !!row && typeof row.enhanced_prompt === "string" && typeof row.enhanced_completion === "string",
-  );
+  ).map((row) => ({ ...row, medium: "image" as const }));
   const prompts: CreativePrompt[] = [];
   sourceRows.forEach((row, index) => {
     const request = row.enhanced_prompt;
@@ -58,8 +115,7 @@ async function fetchPrompts(): Promise<CreativePrompt[]> {
     const kind = (Object.keys(mediaIntent) as CreativeMedium[]).find((medium) => mediaIntent[medium].test(request));
     if (!kind) return;
     const prompt = extractGeneratedPrompt(row.enhanced_completion, kind);
-    if (!prompt) return;
-    prompts.push({ id: `${kind}-${index}`, kind, prompt, sourcePrompt: request });
+    if (prompt) prompts.push({ id: `legacy-${kind}-${index}`, kind, prompt, sourcePrompt: request });
   });
   return prompts;
 }
@@ -106,14 +162,14 @@ function getPrompts(): Promise<CreativePrompt[]> {
               request.onerror = () => reject(request.error);
             });
           }
-          const prompts = await fetchPrompts();
+          const prompts = await fetchPrompts().catch(() => fetchLegacyPrompts());
           await new Promise<void>((resolve, reject) => {
             const transaction = db.transaction(["dataset", "prompts", "metadata"], "readwrite");
             const datasetStore = transaction.objectStore("dataset");
             const store = transaction.objectStore("prompts");
             datasetStore.clear();
             store.clear();
-            sourceRows.forEach((row, id) => datasetStore.put({ id, ...row }));
+    sourceRows.forEach((row, id) => datasetStore.put({ id: `${row.medium}-${id}`, medium: row.medium, sourcePrompt: row.enhanced_prompt }));
             prompts.forEach((prompt) => store.put(prompt));
             transaction.objectStore("metadata").put({ key: "dataset-version", value: DATASET_VERSION });
             transaction.oncomplete = () => resolve();
@@ -126,7 +182,7 @@ function getPrompts(): Promise<CreativePrompt[]> {
         }
       } catch {
         // The prompt picker remains usable when browser storage is blocked.
-        return fetchPrompts().catch(() => []);
+        return fetchPrompts().catch(() => fetchLegacyPrompts()).catch(() => []);
       }
     })();
   }
