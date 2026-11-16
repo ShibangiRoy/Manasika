@@ -6,3 +6,29 @@ services:
     rootDir: "shivUIdes/manasika-ui"
     buildCommand: npm ci && npm run build
     staticPublishPath: dist
+    envVars:
+      - key: VITE_CREATIVE_MEDIA_API_URL
+        value: https://manasika-media-api.onrender.com
+
+  - type: web
+    runtime: docker
+    name: manasika-media-api
+    branch: main
+    rootDir: "shivUIdes/manasika-ui"
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    plan: 0.5c-512mb
+    healthCheckPath: /healthz
+    disk:
+      name: manasika-media-archive
+      mountPath: /app/data
+      sizeGB: 1
+    envVars:
+      - key: MANASIKA_MEDIA_DATA_DIR
+        value: /app/data
+      - key: CREATIVE_MEDIA_ALLOWED_ORIGINS
+        value: https://manasika-wellness.onrender.com
+      - key: MEDIA_SESSION_SECRET
+        generateValue: true
+      - key: POLLINATIONS_API_KEY
+        sync: false

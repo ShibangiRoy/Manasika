@@ -15,15 +15,37 @@ export type CreativeMediaStatus = {
   generationLimitPerHour: number;
 };
 
+const apiBase = (import.meta.env.VITE_CREATIVE_MEDIA_API_URL || "").replace(/\/$/, "");
+const sessionStorageKey = "manasika-creative-media-session";
+let sessionPromise: Promise<{ ready: boolean; accountType: string; token: string }> | null = null;
+
 async function apiRequest<T>(url: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(url, { credentials: "same-origin", ...init });
+  const headers = new Headers(init?.headers);
+  const token = localStorage.getItem(sessionStorageKey);
+  if (token) headers.set("Authorization", `Bearer ${token}`);
+  const response = await fetch(`${apiBase}${url}`, {
+    ...init,
+    headers,
+    credentials: apiBase ? "omit" : "same-origin",
+  });
   const body = await response.json().catch(() => ({})) as { error?: string };
   if (!response.ok) throw new Error(body.error || `Creative media request failed (${response.status}).`);
   return body as T;
 }
 
 export function startCreativeSession() {
-  return apiRequest<{ ready: boolean; accountType: string }>("/api/creative/session");
+  if (!sessionPromise) {
+    sessionPromise = apiRequest<{ ready: boolean; accountType: string; token: string }>("/api/creative/session")
+      .then((session) => {
+        localStorage.setItem(sessionStorageKey, session.token);
+        return session;
+      })
+      .catch((error) => {
+        sessionPromise = null;
+        throw error;
+      });
+  }
+  return sessionPromise;
 }
 
 export function getCreativeMediaStatus() {

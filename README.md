@@ -38,7 +38,7 @@ npm run preview -- --host 0.0.0.0 --port 4173
 3. Render publishes `dist/` from `shivUIdes/manasika-ui`.
 4. The synced Render Blueprint tracks `main`; pushes to `main` trigger deployments.
 
-Render configuration: root directory `shivUIdes/manasika-ui`, build command `npm ci && npm run build`, publish directory `dist`. The static site needs no Node server process or port binding.
+Render keeps the Figma UI at [https://manasika-wellness.onrender.com](https://manasika-wellness.onrender.com) as a static site. A separate Docker web service, `manasika-media-api`, serves the API and stores its SQLite database and image files on a 1 GB persistent disk. The frontend calls that service through `VITE_CREATIVE_MEDIA_API_URL`; the API allows requests only from the Manasika site origin.
 
 ## Date and time behavior
 
@@ -79,7 +79,7 @@ Open [http://localhost:4173](http://localhost:4173). For a production-style loca
 
 The app expects a Pollinations image API key configured as `POLLINATIONS_API_KEY`; generation remains disabled until configured. Set it only as a server environment secret. The default model is `black-forest-labs/flux.1-schnell`; override with `POLLINATIONS_IMAGE_MODEL` if needed. See the [Pollinations image API documentation](https://github.com/pollinations/pollinations/blob/main/gen.pollinations.ai/src/docs/image-generation.md) and [API docs](https://gen.pollinations.ai/docs).
 
-`Dockerfile` builds and serves the UI and API together. The current `render.yaml` still deploys a static site, so the public Render URL does not provide this new API or archive yet. To make generation available publicly, deploy the Docker image as a Node/container web service and attach persistent storage at `/app/data`; configure `POLLINATIONS_API_KEY` and `MEDIA_SESSION_SECRET` in the host's secret settings. Do not expect generated media to persist on ephemeral container storage.
+`Dockerfile` builds and serves the UI and API together for local/container use. On Render, the static site remains at the existing URL, while the separate API service uses the same Docker image with persistent storage mounted at `/app/data`. `render.yaml` creates a server-side session secret and prompts for `POLLINATIONS_API_KEY`; configure that key in Render's secret settings before image generation can run. Render requires a paid web service for persistent disks, and its storage is billed separately; the blueprint uses a 1 GB disk. Browser sessions are anonymous and browser-scoped rather than tied to authenticated Manasika accounts. The API returns a signed session token that the browser stores locally and sends over HTTPS.
 
 ## Feature and data boundaries
 

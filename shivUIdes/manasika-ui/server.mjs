@@ -23,10 +23,11 @@ const retentionDays = Math.min(90, Math.max(1, Number(process.env.MEDIA_RETENTIO
 const generationLimitPerHour = Math.min(10, Math.max(1, Number(process.env.MEDIA_GENERATIONS_PER_HOUR || 3)));
 const globalGenerationLimitPerHour = Math.min(100, Math.max(1, Number(process.env.MEDIA_GLOBAL_GENERATIONS_PER_HOUR || 20)));
 const maxImageBytes = 12 * 1024 * 1024;
-const cookieName = "manasika_creative_session";
 const sessionSecret = process.env.MEDIA_SESSION_SECRET || (process.env.NODE_ENV === "production" ? "" : randomBytes(32).toString("base64url"));
 const providerKey = process.env.POLLINATIONS_API_KEY || "";
 const providerModel = process.env.POLLINATIONS_IMAGE_MODEL || "black-forest-labs/flux.1-schnell";
+const allowedOrigins = new Set((process.env.CREATIVE_MEDIA_ALLOWED_ORIGINS || "http://localhost:4173,http://127.0.0.1:4173,http://localhost:8443,http://127.0.0.1:8443")
+  .split(",").map((origin) => origin.trim()).filter(Boolean));
 const mimeTypes = new Map([
   [".html", "text/html; charset=utf-8"], [".css", "text/css; charset=utf-8"],
   [".js", "text/javascript; charset=utf-8"], [".json", "application/json; charset=utf-8"],
@@ -81,10 +82,11 @@ function signSession(accountId) {
 }
 
 function sessionAccount(req) {
-  const cookie = req.headers.cookie?.split(";").map((part) => part.trim()).find((part) => part.startsWith(`${cookieName}=`));
-  if (!cookie) return null;
+  const authorization = req.headers.authorization || "";
+  const match = /^Bearer\s+(.+)$/i.exec(authorization);
+  if (!match) return null;
   let value;
-  try { value = decodeURIComponent(cookie.slice(cookieName.length + 1)); } catch { return null; }
+  try { value = decodeURIComponent(match[1]); } catch { return null; }
   const separator = value.lastIndexOf(".");
   if (separator < 1) return null;
   const id = value.slice(0, separator);
@@ -92,11 +94,6 @@ function sessionAccount(req) {
   const expected = Buffer.from(signSession(id));
   if (supplied.length !== expected.length || !timingSafeEqual(supplied, expected)) return null;
   return getAccount.get(id)?.id ?? null;
-}
-
-function setSessionCookie(res, accountId) {
-  const secure = process.env.NODE_ENV === "production" ? "; Secure" : "";
-  res.setHeader("Set-Cookie", `${cookieName}=${encodeURIComponent(`${accountId}.${signSession(accountId)}`)}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${30 * 24 * 60 * 60}${secure}`);
 }
 
 function sendJson(res, status, data) {
@@ -135,14 +132,13 @@ function mediaDto(row) {
   };
 }
 
-async function ensureSession(req, res) {
+async function ensureSession(req) {
   let accountId = sessionAccount(req);
   if (!accountId) {
     accountId = randomUUID();
     accountInsert.run(accountId, new Date().toISOString());
-    setSessionCookie(res, accountId);
   }
-  return accountId;
+  return { accountId, token: encodeURIComponent(`${accountId}.${signSession(accountId)}`) };
 }
 
 async function generateImage(req, res, accountId) {
@@ -215,14 +211,31 @@ async function generateImage(req, res, accountId) {
 async function handleRequest(req, res) {
   res.setHeader("X-Content-Type-Options", "nosniff");
   res.setHeader("Referrer-Policy", "same-origin");
+  if (req.url === "/healthz") {
+    res.writeHead(200, { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store" });
+    return res.end("ok");
+  }
   const url = new URL(req.url || "/", `http://${req.headers.host || "localhost"}`);
   const pathname = url.pathname;
 
   if (pathname.startsWith("/api/creative/")) {
+    const origin = req.headers.origin;
+    if (origin && !allowedOrigins.has(origin)) return sendJson(res, 403, { error: "This app origin is not allowed to use the media service." });
+    if (origin) {
+      res.setHeader("Access-Control-Allow-Origin", origin);
+      res.setHeader("Vary", "Origin");
+      res.setHeader("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS");
+      res.setHeader("Access-Control-Allow-Headers", "Authorization, Content-Type");
+      res.setHeader("Access-Control-Max-Age", "600");
+    }
+    if (req.method === "OPTIONS") {
+      res.writeHead(204);
+      return res.end();
+    }
     await removeExpiredMedia();
     if (req.method === "GET" && pathname === "/api/creative/session") {
-      const accountId = await ensureSession(req, res);
-      return sendJson(res, 200, { ready: true, accountType: "anonymous-browser", accountId });
+      const session = await ensureSession(req);
+      return sendJson(res, 200, { ready: true, accountType: "anonymous-browser", token: session.token });
     }
     const accountId = sessionAccount(req);
     if (!accountId) return sendJson(res, 401, { error: "Open Creative Space again to start a private archive session." });
