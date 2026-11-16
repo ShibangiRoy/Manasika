@@ -378,6 +378,33 @@ const listCompanionLiterature = database.prepare(`SELECT title, author, translat
   page_start, page_end, content, rights FROM ai_companion_literature`);
 const getAugmentedCompanionCompletion = database.prepare(`SELECT completion FROM ai_companion_external_memory
   WHERE dataset_key = ? AND record_id = ? AND support_eligible = 1`);
+let companionKnowledgeCache;
+
+function companionKnowledge() {
+  if (companionKnowledgeCache) return companionKnowledgeCache;
+  const support = listCompanionMemory.all().map((pair) => ({
+    pair,
+    prompt: pair.prompt,
+    augmented: false,
+    terms: new Set(companionTerms(pair.prompt)),
+  }));
+  support.push(...database.prepare(`SELECT record_id, prompt FROM ai_companion_external_memory
+    WHERE dataset_key = ? AND support_eligible = 1`).all("mental_health_support_chat_augmented")
+    .map((row) => ({
+      recordId: row.record_id,
+      prompt: row.prompt,
+      augmented: true,
+      terms: new Set(companionTerms(row.prompt)),
+    })));
+  const literature = listCompanionLiterature.all().map((row) => ({
+    row,
+    terms: new Set(companionTerms(`${row.title} ${row.author} ${row.translator} ${row.source_location} ${row.content}`)),
+    titleTerms: new Set(companionTerms(`${row.title} ${row.author}`)),
+  }));
+  companionKnowledgeCache = { support, literature };
+  console.log(`Built AI Companion retrieval index from ${support.length} support records and ${literature.length} literature records.`);
+  return companionKnowledgeCache;
+}
 
 function signSession(accountId) {
   return createHmac("sha256", sessionSecret).update(accountId).digest("base64url");
@@ -477,9 +504,7 @@ const clinicalPersonalIntent = /\b(i feel|i'm feeling|i am feeling|my anxiety|my
 function companionLiteratureReply(message, sourceKind) {
   const queryTerms = [...new Set(companionTerms(message))];
   if (!queryTerms.length) return null;
-  const docs = listCompanionLiterature.all()
-    .filter((row) => row.source_kind === sourceKind)
-    .map((row) => ({ row, terms: new Set(companionTerms(`${row.title} ${row.author} ${row.source_location} ${row.content}`)) }));
+  const docs = companionKnowledge().literature.filter((doc) => doc.row.source_kind === sourceKind);
   if (!docs.length) return null;
   const weights = new Map(queryTerms.map((term) => [term, Math.log(1 + (docs.length + 0.5)
     / (docs.reduce((count, doc) => count + Number(doc.terms.has(term)), 0) + 0.5))]));
@@ -489,8 +514,7 @@ function companionLiteratureReply(message, sourceKind) {
     const matched = queryTerms.filter((term) => doc.terms.has(term));
     if (queryTerms.length >= 2 && matched.length < 2) continue;
     const coverage = matched.reduce((sum, term) => sum + (weights.get(term) ?? 0), 0) / queryWeight;
-    const titleTerms = new Set(companionTerms(`${doc.row.title} ${doc.row.author}`));
-    const titleMatch = queryTerms.some((term) => titleTerms.has(term));
+    const titleMatch = queryTerms.some((term) => doc.titleTerms.has(term));
     const score = coverage * 0.88 + Number(titleMatch) * 0.12;
     if (!best || score > best.score) best = { doc, score };
   }
@@ -524,15 +548,7 @@ function companionDatasetReply(message) {
   }
   const queryTerms = [...new Set(companionTerms(message))];
   if (!queryTerms.length) return null;
-  const pairs = listCompanionMemory.all();
-  const augmentedDocs = database.prepare(`SELECT record_id, prompt FROM ai_companion_external_memory
-    WHERE dataset_key = ? AND support_eligible = 1`)
-    .all("mental_health_support_chat_augmented")
-    .map((row) => ({ recordId: row.record_id, prompt: row.prompt, augmented: true, terms: new Set(companionTerms(row.prompt)) }));
-  const docs = [
-    ...pairs.map((pair) => ({ pair, prompt: pair.prompt, augmented: false, terms: new Set(companionTerms(pair.prompt)) })),
-    ...augmentedDocs,
-  ];
+  const docs = companionKnowledge().support;
   const weights = new Map(queryTerms.map((term) => [term, Math.log(1 + (docs.length + 0.5) / (docs.reduce((n, doc) => n + Number(doc.terms.has(term)), 0) + 0.5))]));
   const queryWeight = [...weights.values()].reduce((sum, weight) => sum + weight, 0) || 1;
   const queryTopics = companionTopics(message);

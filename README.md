@@ -48,7 +48,7 @@ The interface reads the visitor’s device clock and local timezone. Date and ti
 
 The provided zodiac prompt/response dataset is served from `shivUIdes/manasika-ui/public/data/western_zodiac_signs.json`. Cosmic Corner validates and loads its 500 records on first use, stores a versioned copy in the browser's `manasika-cosmic-corner` IndexedDB database, and retrieves a sign-matched response using the visitor's local date. Built-in reflections remain available if browser storage or the dataset request is unavailable.
 
-The Figma UI is deployed as a static site and the companion/media API is a separate server. The prototype has no trainable language-model weights or model-training pipeline. It uses runtime retrieval and does not fine-tune model weights. Browser IndexedDB data stays on the current browser/device and is not shared between users.
+The Figma UI is deployed as a static site and the companion/media API is a separate server. The prototype has no trainable language-model weights or model-training pipeline. The backend synchronizes versioned datasets into SQLite, then builds a reusable term index over support and literature records so Companion can search its stored knowledge directly. New dataset versions are picked up on backend startup. This retrieval-augmented approach lets the assistant use the database assets as context; it does not update model weights or fine-tune the model. Browser IndexedDB data stays on the current browser/device and is not shared between users.
 
 ## AI Companion data
 
