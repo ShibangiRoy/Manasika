@@ -30,6 +30,8 @@ const providerKey = process.env.POLLINATIONS_API_KEY || "";
 const providerModel = process.env.POLLINATIONS_IMAGE_MODEL || "black-forest-labs/flux.1-schnell";
 const textProviderKey = process.env.GROQ_API_KEY || "";
 const textProviderModel = process.env.GROQ_TEXT_MODEL || "openai/gpt-oss-20b";
+const companionGroqKey = process.env.COMPANION_GROQ_API_KEY || "";
+const companionGroqModel = process.env.COMPANION_GROQ_MODEL || "openai/gpt-oss-20b";
 const companionModelApiUrl = process.env.COMPANION_MODEL_API_URL || "";
 const allowedOrigins = new Set((process.env.CREATIVE_MEDIA_ALLOWED_ORIGINS || "http://localhost:4173,http://127.0.0.1:4173,http://localhost:8443,http://127.0.0.1:8443")
   .split(",").map((origin) => origin.trim()).filter(Boolean));
@@ -696,6 +698,40 @@ function companionDatasetReply(message, curatedReply = undefined) {
 }
 
 async function companionModelReply(message, memory) {
+  if (companionGroqKey) {
+    try {
+      const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${companionGroqKey}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: companionGroqModel,
+          messages: [
+            {
+              role: "system",
+              content: "You are Manasika's supportive AI Companion. Answer the user's actual question directly and helpfully. Use the retrieved memory only when it is relevant; do not claim it says something it does not. Be warm, concise, non-judgmental, and practical. Do not diagnose, prescribe, or replace professional care. Do not end by asking a follow-up question. If the memory is unrelated, answer using general, careful emotional-support knowledge.",
+            },
+            {
+              role: "user",
+              content: `Retrieved memory (may be empty or unrelated):\n${memory || "No closely matched memory was found."}\n\nUser's question:\n${message}`,
+            },
+          ],
+          temperature: 0.45,
+          max_tokens: 600,
+        }),
+        signal: AbortSignal.timeout(45_000),
+      });
+      if (!response.ok) {
+        console.warn(`Groq Companion request failed with HTTP ${response.status}; falling back to dataset retrieval.`);
+        return null;
+      }
+      const result = await response.json();
+      const reply = result?.choices?.[0]?.message?.content;
+      return typeof reply === "string" && reply.trim().length <= 2400 ? reply.trim() || null : null;
+    } catch {
+      console.warn("Groq Companion is unavailable; falling back to dataset retrieval.");
+      return null;
+    }
+  }
   if (!companionModelApiUrl) return null;
   let endpoint;
   try { endpoint = new URL(companionModelApiUrl); } catch { return null; }
@@ -896,7 +932,14 @@ async function handleRequest(req, res) {
     if (!accountId) return sendJson(res, 401, { error: "Open Creative Space again to start a private archive session." });
 
     if (req.method === "GET" && pathname === "/api/creative/status") {
-      return sendJson(res, 200, { providerConfigured: Boolean(providerKey), textGenerationConfigured: Boolean(textProviderKey), model: providerModel, archiveDays: retentionDays, generationLimitPerHour });
+      return sendJson(res, 200, {
+        providerConfigured: Boolean(providerKey),
+        textGenerationConfigured: Boolean(textProviderKey),
+        companionModelConfigured: Boolean(companionGroqKey || companionModelApiUrl),
+        model: providerModel,
+        archiveDays: retentionDays,
+        generationLimitPerHour,
+      });
     }
     if (req.method === "POST" && pathname === "/api/creative/companion-reply") {
       let body;
