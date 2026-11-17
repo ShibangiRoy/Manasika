@@ -622,7 +622,29 @@ function companionLiteratureReply(message, sourceKind) {
   return `In ${row.title} by ${row.author}${location}, the passage most relevant to your question states: “${excerpt}”`;
 }
 
-function companionDatasetReply(message) {
+function companionCuratedReply(message) {
+  const queryTerms = [...new Set(companionTerms(message))];
+  if (!queryTerms.length) return null;
+  const docs = companionKnowledge().support.filter((doc) => doc.curated);
+  if (!docs.length) return null;
+  const weights = new Map(queryTerms.map((term) => [term, Math.log(1 + (docs.length + 0.5)
+    / (docs.reduce((count, doc) => count + Number(doc.terms.has(term)), 0) + 0.5))]));
+  const queryWeight = [...weights.values()].reduce((sum, weight) => sum + weight, 0) || 1;
+  let best = null;
+  for (const doc of docs) {
+    const matched = queryTerms.filter((term) => doc.terms.has(term));
+    if (queryTerms.length >= 2 && matched.length < 2) continue;
+    const coverage = matched.reduce((sum, term) => sum + (weights.get(term) ?? 0), 0) / queryWeight;
+    const phraseMatch = queryTerms.some((term, index) => index < queryTerms.length - 1
+      && doc.prompt.toLowerCase().includes(`${term} ${queryTerms[index + 1]}`));
+    const score = coverage * 0.88 + Number(phraseMatch) * 0.12;
+    if (!best || score > best.score) best = { doc, score };
+  }
+  if (!best || best.score < 0.42) return null;
+  return best.doc.pair.completion;
+}
+
+function companionDatasetReply(message, curatedReply = undefined) {
   if (urgentSupportPattern.test(message)) return urgentSupportReply;
   if (medicalBoundaryPattern.test(message)) return medicalBoundaryReply;
   const namedClassic = /\b(white nights|metamorphosis|dostoevsky|dostoyevsky|kafka|gregor samsa|nastenka)\b/i.test(message);
@@ -632,6 +654,8 @@ function companionDatasetReply(message) {
   if (psychologyLearningIntent.test(message) && !clinicalPersonalIntent.test(message)) {
     return companionLiteratureReply(message, "psychology_reference");
   }
+  const curated = curatedReply === undefined ? companionCuratedReply(message) : curatedReply;
+  if (curated) return curated;
   const queryTerms = [...new Set(companionTerms(message))];
   if (!queryTerms.length) return null;
   const docs = companionKnowledge().support;
@@ -823,9 +847,10 @@ async function handleRequest(req, res) {
       try { body = await readJson(req); } catch (error) { return sendJson(res, 400, { error: error.message }); }
       const message = typeof body.message === "string" ? body.message.trim() : "";
       if (!message || message.length > 4000) return sendJson(res, 400, { error: "Enter a message between 1 and 4,000 characters." });
-      const memoryReply = companionDatasetReply(message);
       const isSafetyReply = urgentSupportPattern.test(message) || medicalBoundaryPattern.test(message);
-      const generatedReply = isSafetyReply ? null : await companionModelReply(message, memoryReply);
+      const curatedReply = isSafetyReply ? null : companionCuratedReply(message);
+      const memoryReply = companionDatasetReply(message, curatedReply);
+      const generatedReply = isSafetyReply || curatedReply ? null : await companionModelReply(message, memoryReply);
       return sendJson(res, 200, { reply: generatedReply || memoryReply });
     }
     if (req.method === "GET" && pathname === "/api/creative/media") {
