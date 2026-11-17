@@ -1,0 +1,338 @@
+{
+  "version": 1,
+  "records": [
+    {
+      "slug": "emotion-overload",
+      "topic": "Overload of emotion",
+      "aliases": ["emotional overwhelm", "too many feelings", "emotion overload"],
+      "prompt": "I feel overwhelmed by emotions and everything feels intense at once.",
+      "completion": "When several feelings arrive together, you do not have to solve all of them at once. Pause, feel your feet on the floor, and name one feeling without judging it. Then choose one small need for the next few minutes: quiet, water, space, or contacting someone supportive. If this keeps disrupting daily life, a mental-health professional can help you find coping strategies.",
+      "safety_tier": "general",
+      "sources": ["https://www.nimh.nih.gov/health/publications/my-mental-health-do-i-need-help"]
+    },
+    {
+      "slug": "self-sabotage",
+      "topic": "Self sabotage",
+      "aliases": ["self-sabotaging", "getting in my own way", "avoidance pattern"],
+      "prompt": "I keep getting in my own way and sabotaging things I care about.",
+      "completion": "A pattern that gets in your way may be trying to protect you from discomfort, even when it costs you something. Describe the pattern neutrally, notice what tends to happen just before it, and pick one smaller next action that feels manageable. Treat a slip as information about what support or adjustment you need, not proof that you are a failure.",
+      "safety_tier": "general",
+      "sources": ["https://www.nimh.nih.gov/health/publications/my-mental-health-do-i-need-help"]
+    },
+    {
+      "slug": "emotional-confusion",
+      "topic": "Emotional confusion",
+      "aliases": ["confused feelings", "mixed emotions", "not sure what I feel"],
+      "prompt": "I cannot tell what I feel; my emotions seem mixed or confusing.",
+      "completion": "It is possible to feel more than one thing at once. Try writing three short lines: what happened, what feelings might be present, and what you need right now. You do not need the perfect label before choosing a kind next step. If the confusion is intense, persistent, or affecting your safety or daily functioning, speak with a qualified professional.",
+      "safety_tier": "general",
+      "sources": ["https://www.nimh.nih.gov/health/publications/my-mental-health-do-i-need-help"]
+    },
+    {
+      "slug": "attachment-concerns",
+      "topic": "Attachment issue",
+      "aliases": ["attachment issues", "fear of abandonment", "relationship insecurity", "clingy"],
+      "prompt": "I feel insecure or afraid of being abandoned in my relationships.",
+      "completion": "That fear can feel powerful, but it does not make you difficult or unlovable. When it rises, pause before sending repeated messages or withdrawing; identify the specific reassurance or boundary you need, then communicate it plainly. Keep nurturing routines and relationships outside this one too. A therapist can help if this pattern causes repeated distress.",
+      "safety_tier": "general",
+      "sources": ["https://www.nimh.nih.gov/health/publications/my-mental-health-do-i-need-help"]
+    },
+    {
+      "slug": "suicidal-thoughts",
+      "topic": "Suicidal thoughts",
+      "aliases": ["suicide", "wanting to die", "thoughts of ending my life", "self-harm thoughts"],
+      "prompt": "I am having suicidal thoughts or thoughts of ending my life.",
+      "completion": "I’m really glad you told me. You deserve immediate human support, and you do not have to manage this alone. If you might act soon or cannot stay safe, contact your local emergency number or go to the nearest emergency department now; if possible, stay with someone you trust and move away from anything you could use to hurt yourself. If danger is not immediate, tell someone you trust and contact a mental-health professional or crisis line today.",
+      "safety_tier": "urgent",
+      "sources": ["https://www.who.int/news-room/questions-and-answers/item/suicide"]
+    },
+    {
+      "slug": "anger-temper",
+      "topic": "Bad temper",
+      "aliases": ["short temper", "losing my temper", "snapping at people", "irritable"],
+      "prompt": "I lose my temper quickly and regret what I say.",
+      "completion": "Notice your earliest warning signs, such as a tight jaw, heat, or a faster voice. When they appear, pause the conversation and take space if it is safe; agree on when you will return to it. Avoid sending messages while activated, then repair specific harm without excusing it. If you fear you may hurt someone, create distance and seek urgent real-time help.",
+      "safety_tier": "general",
+      "sources": ["https://www.nimh.nih.gov/health/publications/my-mental-health-do-i-need-help"]
+    },
+    {
+      "slug": "communication-skills",
+      "topic": "Lack of communication skills",
+      "aliases": ["communication problems", "cannot express myself", "hard to communicate", "poor communication"],
+      "prompt": "I struggle to express what I mean and communicate clearly.",
+      "completion": "Keep the message small and concrete. Try: “When [specific event] happens, I feel [feeling]. I need [need]. Could we [clear request]?” Then pause and let the other person respond; repeat what you heard before defending your point. Practising one low-stakes conversation at a time can make this easier.",
+      "safety_tier": "general",
+      "sources": ["https://www.nimh.nih.gov/health/publications/my-mental-health-do-i-need-help"]
+    },
+    {
+      "slug": "guilt-pressure",
+      "topic": "Guilt trapping",
+      "aliases": ["guilt tripping", "being guilt-tripped", "coerced by guilt", "manipulation"],
+      "prompt": "Someone uses guilt to pressure me into doing what they want.",
+      "completion": "You can care about someone and still say no. Separate what you are genuinely responsible for from what another person is asking you to carry. A calm boundary can be brief: “I understand you’re upset, but I can’t agree to that.” If setting a boundary could put you at risk, prioritize safety and talk privately with someone you trust or a local support service.",
+      "safety_tier": "general",
+      "sources": ["https://www.nimh.nih.gov/health/publications/my-mental-health-do-i-need-help"]
+    },
+    {
+      "slug": "spotlight-effect",
+      "topic": "Spotlight effect",
+      "aliases": ["everyone is watching me", "people notice every mistake", "social self-consciousness"],
+      "prompt": "I feel like everyone notices and judges every small thing I do.",
+      "completion": "Feeling watched can make a small moment seem much bigger than it is. Gently ask what evidence you have, what else might explain the situation, and what you would notice if your attention were on the activity instead of yourself. Try one manageable social step, then judge it by what you learned rather than by whether it felt perfect.",
+      "safety_tier": "general",
+      "sources": ["https://www.nimh.nih.gov/health/publications/my-mental-health-do-i-need-help"]
+    },
+    {
+      "slug": "hallucinations",
+      "topic": "Hallucinations",
+      "aliases": ["hearing voices", "seeing things others do not", "unusual sensory experiences"],
+      "prompt": "I hear, see, feel, smell, or taste things that other people do not seem to experience.",
+      "completion": "That may feel confusing or frightening. I cannot determine the cause here, and experiences like this can have different causes, so please contact a healthcare professional promptly—especially if this is new or worsening. If a voice is urging harm, you feel at risk, or you are suddenly confused, get urgent help now and stay with someone you trust if possible.",
+      "safety_tier": "urgent_review",
+      "sources": ["https://www.nhs.uk/mental-health/feelings-symptoms-behaviours/feelings-and-symptoms/hallucinations-hearing-voices/", "https://www.nhs.uk/mental-health/conditions/psychosis/overview/"]
+    },
+    {
+      "slug": "schizophrenia-concern",
+      "topic": "Schizophrenia concern",
+      "aliases": ["schizophrenia", "psychosis", "fear I have schizophrenia"],
+      "prompt": "I am worried I might have schizophrenia or someone close to me has it.",
+      "completion": "I can’t diagnose schizophrenia from a message, and unusual thoughts or perceptions can have different causes. A qualified mental-health professional can assess what is happening and discuss support without judgment. If you already have a care plan, contact your care team before making changes; do not stop or change prescribed treatment on your own. Seek urgent help if anyone may be harmed or cannot stay safe.",
+      "safety_tier": "professional",
+      "sources": ["https://www.nimh.nih.gov/health/publications/schizophrenia", "https://www.nhs.uk/mental-health/conditions/psychosis/overview/"]
+    },
+    {
+      "slug": "financial-uncertainty",
+      "topic": "Financial uncertainty",
+      "aliases": ["money stress", "financial anxiety", "debt worry", "uncertain finances"],
+      "prompt": "I feel overwhelmed and uncertain about my finances.",
+      "completion": "Money uncertainty can make everything feel urgent. Start with a private, simple snapshot: essential bills, due dates, money available, and the next decision that cannot wait. Contact a provider early to ask about options, and consider a reputable nonprofit or public financial-counselling service. Avoid making a high-pressure decision while panicked; this is general support, not personalized financial advice.",
+      "safety_tier": "general",
+      "sources": ["https://www.who.int/news-room/fact-sheets/detail/mental-health-at-work"]
+    },
+    {
+      "slug": "future-uncertainty",
+      "topic": "Future uncertainty",
+      "aliases": ["uncertain future", "fear of the future", "not knowing what comes next"],
+      "prompt": "I am anxious because I do not know what will happen in the future.",
+      "completion": "You do not need to solve your whole future today. Write down what is known, what is uncertain, and one part you can influence in the next 24 hours. Choose a small action, then give yourself permission to revisit the bigger question at a planned time instead of carrying it every minute.",
+      "safety_tier": "general",
+      "sources": ["https://www.nimh.nih.gov/health/publications/my-mental-health-do-i-need-help"]
+    },
+    {
+      "slug": "decision-second-guessing",
+      "topic": "Double guessing a decision",
+      "aliases": ["second guessing", "doubting every decision", "decision regret"],
+      "prompt": "I keep second-guessing a decision after I have made it.",
+      "completion": "Repeatedly replaying a choice does not always add new information. Check whether anything important has actually changed. If not, remind yourself of the reasons you chose it and set a time to review later. For the next decision, define two or three priorities first and distinguish choices you can reverse from choices that need more care.",
+      "safety_tier": "general",
+      "sources": ["https://www.nimh.nih.gov/health/publications/my-mental-health-do-i-need-help"]
+    },
+    {
+      "slug": "urges-to-harm-others",
+      "topic": "Sadism or urges to cause harm",
+      "aliases": ["sadistic urges", "enjoy hurting people", "urge to hurt someone"],
+      "prompt": "I worry that I enjoy causing pain or might hurt someone.",
+      "completion": "It is good to take a concern about another person’s safety seriously without reducing yourself to a label. Do not act on an urge; create distance from anyone you might harm and avoid weapons or substances. Contact a qualified mental-health professional promptly. If you think someone is in immediate danger, call local emergency services now.",
+      "safety_tier": "urgent_review",
+      "sources": ["https://www.nimh.nih.gov/health/publications/my-mental-health-do-i-need-help"]
+    },
+    {
+      "slug": "fomo",
+      "topic": "Fear of missing out",
+      "aliases": ["FOMO", "fear of missing events", "left out online"],
+      "prompt": "I keep worrying that I am missing out on what everyone else is doing.",
+      "completion": "FOMO can pull your attention toward every event and update. Ask what you actually want—connection, rest, novelty, or reassurance—and choose one action that meets that need. You can mute a feed for a while and make one intentional plan; declining something is not proof that you are falling behind.",
+      "safety_tier": "general",
+      "sources": ["https://www.nimh.nih.gov/health/publications/my-mental-health-do-i-need-help"]
+    },
+    {
+      "slug": "delusional-beliefs-concern",
+      "topic": "Delusion or unusual fixed belief concern",
+      "aliases": ["delusion", "paranoid belief", "belief people are plotting", "reality feels uncertain"],
+      "prompt": "I have a belief that frightens me and other people say it is not true.",
+      "completion": "That sounds unsettling. I can’t verify the belief from here, and I won’t dismiss how real or frightening it feels to you. Focus on immediate safety and speak with a healthcare professional promptly, especially if this is new or getting stronger. If you feel pushed to harm yourself or someone else, or cannot stay safe, seek emergency help and stay with a trusted person.",
+      "safety_tier": "urgent_review",
+      "sources": ["https://www.nhs.uk/mental-health/conditions/psychosis/overview/", "https://www.nhs.uk/every-mind-matters/urgent-support/"]
+    },
+    {
+      "slug": "self-blame",
+      "topic": "Self blaming",
+      "aliases": ["blaming myself for everything", "self blame", "everything is my fault"],
+      "prompt": "I blame myself for everything, even when I am not sure it was my fault.",
+      "completion": "Try separating responsibility from total blame. Write what was within your control, what belonged to other people or circumstances, and what you would say to a friend in the same situation. If you caused harm, one specific repair is more useful than punishing yourself indefinitely. You are allowed to learn and still treat yourself with care.",
+      "safety_tier": "general",
+      "sources": ["https://www.nimh.nih.gov/health/publications/my-mental-health-do-i-need-help"]
+    },
+    {
+      "slug": "narcissism-worry",
+      "topic": "Worry about narcissism",
+      "aliases": ["narcissism", "narcissistic", "am I a narcissist", "self-centered behavior"],
+      "prompt": "I worry that I am narcissistic or that someone has labeled me a narcissist.",
+      "completion": "A label from a post or argument cannot diagnose you or someone else. Look instead at specific behaviours: can you listen, respect boundaries, take responsibility, and repair harm? If a recurring pattern is hurting your relationships or distressing you, a qualified professional can help you understand it without reducing you to a label.",
+      "safety_tier": "professional",
+      "sources": ["https://www.nhs.uk/mental-health/conditions/personality-disorder/"]
+    },
+    {
+      "slug": "imposter-feelings",
+      "topic": "Imposter syndrome",
+      "aliases": ["imposter feelings", "fraud at work", "do not deserve success", "impostor syndrome"],
+      "prompt": "I feel like a fraud and that I do not deserve my achievements.",
+      "completion": "That feeling is not proof that you lack ability. Keep a short record of what you completed, what skills helped, and what you are still learning. Ask for concrete feedback from someone trustworthy and focus on the next task rather than proving you deserve to be there. You can be capable and still have room to grow.",
+      "safety_tier": "general",
+      "sources": ["https://www.nimh.nih.gov/health/publications/my-mental-health-do-i-need-help"]
+    },
+    {
+      "slug": "introversion",
+      "topic": "Introversion",
+      "aliases": ["introvert", "introvertism", "need time alone", "social battery"],
+      "prompt": "I am introverted and worry that something is wrong with me because I need time alone.",
+      "completion": "Needing quiet or fewer social plans is not, by itself, a problem to fix. Plan recovery time after busy situations and choose ways of connecting that suit you, such as one-to-one conversations. If fear or distress—not simply preference—is keeping you from things you value, a counsellor can help you explore that difference.",
+      "safety_tier": "general",
+      "sources": ["https://www.nimh.nih.gov/health/publications/my-mental-health-do-i-need-help"]
+    },
+    {
+      "slug": "people-pleasing-relationships",
+      "topic": "People pleasing in relationships",
+      "aliases": ["people pleasing", "cannot say no", "fear disappointing people", "approval seeking"],
+      "prompt": "I say yes to people because I am afraid they will be upset if I say no.",
+      "completion": "You can be considerate without agreeing to everything. Give yourself a pause before answering, then try a short boundary: “I can’t commit to that right now.” Notice that someone’s disappointment is uncomfortable but does not automatically mean you did something wrong. Practise first with a small, safe request.",
+      "safety_tier": "general",
+      "sources": ["https://www.nimh.nih.gov/health/publications/my-mental-health-do-i-need-help"]
+    },
+    {
+      "slug": "work-life-imbalance",
+      "topic": "Work-life imbalance from overworking",
+      "aliases": ["working too much", "work consumes my life", "cannot switch off work", "workaholic"],
+      "prompt": "I focus on work so much that the rest of my life is getting squeezed out.",
+      "completion": "This can be a workload or boundary problem, not a personal failure. Pick one protected stopping time or short break, and make the transition visible—close the laptop, write tomorrow’s first task, and step away. If demands are unrealistic, discuss priorities and workload with a manager or trusted support person. WHO describes burnout as related to chronic workplace stress, not a personal weakness.",
+      "safety_tier": "general",
+      "sources": ["https://www.who.int/news-room/fact-sheets/detail/mental-health-at-work", "https://www.who.int/standards/classifications/frequently-asked-questions/burn-out-an-occupational-phenomenon"]
+    },
+    {
+      "slug": "academic-stress",
+      "topic": "Academic stress",
+      "aliases": ["exam stress", "study pressure", "school workload", "college anxiety"],
+      "prompt": "Academic pressure is overwhelming me and I cannot focus on everything I need to do.",
+      "completion": "Make the workload visible, then choose the next task that matters most—not the whole semester. Break it into a 20-minute starting step, take a short break, and ask a teacher, advisor, or classmate about priorities or extensions early. Sleep and meals support concentration; sacrificing both often makes studying harder.",
+      "safety_tier": "general",
+      "sources": ["https://www.nimh.nih.gov/health/publications/my-mental-health-do-i-need-help"]
+    },
+    {
+      "slug": "social-media-pressure",
+      "topic": "Social media pressure",
+      "aliases": ["online comparison", "pressure to post", "social media anxiety", "comparison trap"],
+      "prompt": "Social media makes me feel behind, unattractive, or pressured to present a perfect life.",
+      "completion": "A feed is a selected slice of people’s lives, not a fair measure of yours. Unfollow or mute accounts that reliably leave you feeling worse, set a time to check rather than scrolling automatically, and do one offline activity that matters to you. Your worth is not a post, view count, or comparison.",
+      "safety_tier": "general",
+      "sources": ["https://www.nimh.nih.gov/health/publications/my-mental-health-do-i-need-help"]
+    },
+    {
+      "slug": "people-pleasing-family-work",
+      "topic": "People pleasing at work or with family",
+      "aliases": ["overcommitting", "always accommodating", "fear of disapproval", "taking on everyone's tasks"],
+      "prompt": "I keep taking on extra work or family responsibilities because I want everyone to approve of me.",
+      "completion": "Before agreeing, check your time and energy and ask what would need to move if you accepted. A respectful response can be: “I can do X, but I can’t take on Y this week.” You do not need to justify every limit. If others punish or threaten you for setting reasonable boundaries, seek support and consider your safety.",
+      "safety_tier": "general",
+      "sources": ["https://www.who.int/news-room/fact-sheets/detail/mental-health-at-work"]
+    },
+    {
+      "slug": "perfectionism",
+      "topic": "Perfectionism",
+      "aliases": ["fear of imperfect work", "nothing is ever good enough", "perfectionist"],
+      "prompt": "I keep revising because nothing I do feels good enough.",
+      "completion": "Set the standard before you start: what does “complete and good enough for this task” mean? Put a reasonable time limit on the first draft, then do one planned review for important errors. Perfection is not the same as care; finishing a useful version is often the next step you need.",
+      "safety_tier": "general",
+      "sources": ["https://www.nimh.nih.gov/health/publications/my-mental-health-do-i-need-help"]
+    },
+    {
+      "slug": "emotional-burnout",
+      "topic": "Emotional burnout",
+      "aliases": ["emotionally exhausted", "burned out", "chronic exhaustion", "nothing left to give"],
+      "prompt": "I feel emotionally burned out and have nothing left to give.",
+      "completion": "That level of exhaustion deserves attention, not blame. Reduce one nonessential demand if you can, take a real recovery break, and tell someone you trust what has become unsustainable. If this is persistent or affecting your health and daily functioning, talk with a healthcare professional. If the strain is work-related, workload and support conditions may need to change too.",
+      "safety_tier": "professional",
+      "sources": ["https://www.who.int/standards/classifications/frequently-asked-questions/burn-out-an-occupational-phenomenon", "https://www.who.int/news-room/fact-sheets/detail/mental-health-at-work"]
+    },
+    {
+      "slug": "relationship-dependency",
+      "topic": "Relationship dependency",
+      "aliases": ["dependent relationship", "cannot be alone without partner", "relationship dependency", "lose myself in relationship"],
+      "prompt": "I depend on my relationship so much that I have lost touch with my own needs.",
+      "completion": "You can value the relationship while rebuilding a life that also belongs to you. Choose one small routine, interest, or supportive connection that is yours, and practise stating one need or boundary clearly. If fear, control, or isolation is involved, speak privately with someone you trust or a professional; prioritize safety if setting limits could put you at risk.",
+      "safety_tier": "general",
+      "sources": ["https://www.nimh.nih.gov/health/publications/my-mental-health-do-i-need-help"]
+    },
+    {
+      "slug": "fear-of-failure",
+      "topic": "Fear of failure",
+      "aliases": ["afraid to fail", "fear of making mistakes", "failure anxiety", "avoid trying"],
+      "prompt": "I avoid trying because I am afraid of failing.",
+      "completion": "Fear of failure can make avoidance feel safer in the short term. Define a small experiment where the goal is to learn, not to prove your worth. Decide in advance what a useful attempt looks like and what you would do if it goes imperfectly. One outcome cannot define your ability or your future.",
+      "safety_tier": "general",
+      "sources": ["https://www.nimh.nih.gov/health/publications/my-mental-health-do-i-need-help"]
+    },
+    {
+      "slug": "pessimism",
+      "topic": "Pessimism",
+      "aliases": ["expecting the worst", "negative outlook", "nothing will work", "hopeless outlook"],
+      "prompt": "I always expect the worst and find it hard to imagine things improving.",
+      "completion": "You do not have to force optimism. Try treating the worst-case thought as a prediction, then write one other plausible outcome and one step that would help in either case. If hopelessness is lasting, worsening, or interfering with everyday life, tell someone you trust and contact a mental-health professional.",
+      "safety_tier": "professional",
+      "sources": ["https://www.nimh.nih.gov/health/publications/my-mental-health-do-i-need-help"]
+    },
+    {
+      "slug": "anger-issues",
+      "topic": "Anger issue",
+      "aliases": ["anger issues", "anger management", "resentment", "angry all the time"],
+      "prompt": "I have anger issues and want to respond without making things worse.",
+      "completion": "Track what tends to come before anger—stress, feeling ignored, hunger, or lack of sleep—and plan a pause at the earliest sign. Step away safely, slow your breathing, and return to the issue when you can speak without threats or insults. Later, name the impact and repair what you can. If you fear losing control or harming anyone, create distance and seek urgent support.",
+      "safety_tier": "general",
+      "sources": ["https://www.nimh.nih.gov/health/publications/my-mental-health-do-i-need-help"]
+    },
+    {
+      "slug": "bipolar-disorder-concern",
+      "topic": "Bipolar disorder concern",
+      "aliases": ["bipolar", "bipolar disorder", "mania", "hypomania", "mood episodes"],
+      "prompt": "I am worried I may have bipolar disorder or I have questions about a diagnosis.",
+      "completion": "I can’t diagnose bipolar disorder here. If you notice marked changes in mood, energy, sleep, or activity that affect daily life, a qualified clinician can assess the pattern over time and discuss support. If you already have a treatment plan, contact your care team before changing anything; do not stop or adjust prescribed medication on your own. Seek urgent help if you cannot stay safe.",
+      "safety_tier": "professional",
+      "sources": ["https://www.nimh.nih.gov/health/publications/bipolar-disorder"]
+    },
+    {
+      "slug": "dissociation-did-concern",
+      "topic": "Dissociation or DID concern",
+      "aliases": ["multiple personality disorder", "dissociative identity disorder", "DID", "memory gaps", "dissociation"],
+      "prompt": "I have memory gaps or feel disconnected and wonder about multiple personality disorder.",
+      "completion": "I can’t diagnose dissociation or dissociative identity disorder from a message. “Multiple personality disorder” is an older term; a qualified mental-health professional can assess memory gaps or disconnection carefully and explain what support may help. You deserve to be taken seriously without being reduced to an online label. Seek urgent help if you are at immediate risk or unable to stay safe.",
+      "safety_tier": "professional",
+      "sources": ["https://www.nimh.nih.gov/health/publications/schizophrenia"]
+    },
+    {
+      "slug": "overthinking",
+      "topic": "Overthinking",
+      "aliases": ["rumination", "thought loop", "cannot stop thinking", "replaying everything"],
+      "prompt": "I cannot stop replaying conversations and worrying about every possibility.",
+      "completion": "A thought loop can feel like problem-solving without producing a new answer. Write the worry in one sentence, mark what is actionable today, and take one small action on that part. For the rest, set a later time to revisit it and bring attention back to what you can see, hear, or do now. If it keeps affecting sleep or daily life, seek support.",
+      "safety_tier": "general",
+      "sources": ["https://www.nimh.nih.gov/health/publications/my-mental-health-do-i-need-help"]
+    },
+    {
+      "slug": "decision-paralysis",
+      "topic": "Decision paralysis",
+      "aliases": ["cannot make a decision", "stuck choosing", "choice paralysis", "too many options"],
+      "prompt": "I am frozen because I have too many options and cannot decide.",
+      "completion": "Reduce the choice to two or three realistic options. Name what matters most, identify whether the decision is reversible, and choose a reasonable deadline. For a reversible choice, pick the option that best meets your main need and learn from it. For a high-stakes or hard-to-reverse choice, ask a trusted person or qualified adviser for a second perspective.",
+      "safety_tier": "general",
+      "sources": ["https://www.nimh.nih.gov/health/publications/my-mental-health-do-i-need-help"]
+    },
+    {
+      "slug": "conflict-avoidance",
+      "topic": "Conflict avoiding",
+      "aliases": ["conflict avoidance", "avoid difficult conversations", "afraid of confrontation", "people get upset"],
+      "prompt": "I avoid difficult conversations until the problem becomes bigger.",
+      "completion": "Choose one specific issue and a calm, private time. Start with what happened and what you need, without guessing the other person’s motives: “I’d like to talk about X; can we agree on Y?” You can write your opening sentence beforehand and keep the conversation short. If the other person is threatening or abusive, do not prioritize confrontation—focus on safety and outside support.",
+      "safety_tier": "general",
+      "sources": ["https://www.nimh.nih.gov/health/publications/my-mental-health-do-i-need-help"]
+    }
+  ]
+}

@@ -93,6 +93,18 @@ database.exec(`
     PRIMARY KEY(dataset_key, record_id)
   );
   CREATE INDEX IF NOT EXISTS ai_companion_external_support ON ai_companion_external_memory(dataset_key, support_eligible);
+  CREATE TABLE IF NOT EXISTS ai_companion_curated_memory (
+    dataset_key TEXT NOT NULL,
+    slug TEXT NOT NULL,
+    topic TEXT NOT NULL,
+    aliases TEXT NOT NULL,
+    prompt TEXT NOT NULL,
+    completion TEXT NOT NULL,
+    safety_tier TEXT NOT NULL,
+    sources TEXT NOT NULL,
+    PRIMARY KEY(dataset_key, slug)
+  );
+  CREATE INDEX IF NOT EXISTS ai_companion_curated_topic ON ai_companion_curated_memory(dataset_key, topic);
   CREATE TABLE IF NOT EXISTS ai_companion_literature (
     dataset_key TEXT NOT NULL,
     record_id INTEGER NOT NULL,
@@ -354,7 +366,67 @@ async function syncCompanionMemory() {
   }
 }
 
+async function syncCuratedCompanionTopics() {
+  const datasetKey = "companion_wellbeing_topics";
+  const filePath = path.join(distDir, "data", "datasets", "ai_companion", "companion_wellbeing_topics.json");
+  let raw;
+  try { raw = await readFile(filePath, "utf8"); } catch {
+    console.warn("Curated wellbeing topics are unavailable; retaining the current database copy.");
+    return;
+  }
+  let parsed;
+  try { parsed = JSON.parse(raw); } catch {
+    console.error("Curated wellbeing topics are not valid JSON; retaining the current database copy.");
+    return;
+  }
+  if (parsed?.version !== 1 || !Array.isArray(parsed.records)) {
+    console.error("Curated wellbeing topics have an unsupported format; retaining the current database copy.");
+    return;
+  }
+  const records = parsed.records.filter((row) => {
+    if (!row || typeof row.slug !== "string" || !/^[a-z0-9-]{2,80}$/.test(row.slug)
+      || typeof row.topic !== "string" || !row.topic.trim()
+      || typeof row.prompt !== "string" || !row.prompt.trim()
+      || typeof row.completion !== "string" || !row.completion.trim()
+      || !Array.isArray(row.aliases) || !Array.isArray(row.sources)) return false;
+    if (!["general", "professional", "urgent", "urgent_review"].includes(row.safety_tier)) return false;
+    return row.sources.every((source) => {
+      try { return new URL(source).protocol === "https:"; } catch { return false; }
+    });
+  });
+  if (!records.length) {
+    console.error("Curated wellbeing topics had no valid records; retaining the current database copy.");
+    return;
+  }
+  const sha256 = createHash("sha256").update(raw).digest("hex");
+  const current = database.prepare("SELECT sha256 FROM ai_companion_memory_meta WHERE dataset_key = ?").get(datasetKey);
+  if (current?.sha256 === sha256) return;
+  const insert = database.prepare(`INSERT INTO ai_companion_curated_memory
+    (dataset_key, slug, topic, aliases, prompt, completion, safety_tier, sources)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)`);
+  database.exec("BEGIN IMMEDIATE");
+  try {
+    database.prepare("DELETE FROM ai_companion_curated_memory WHERE dataset_key = ?").run(datasetKey);
+    for (const row of records) {
+      const aliases = row.aliases.filter((alias) => typeof alias === "string" && alias.trim()).slice(0, 30);
+      const sources = row.sources.filter((source) => typeof source === "string").slice(0, 12);
+      insert.run(datasetKey, row.slug, row.topic.trim(), JSON.stringify(aliases), row.prompt.trim(),
+        row.completion.trim(), row.safety_tier, JSON.stringify(sources));
+    }
+    database.prepare(`INSERT INTO ai_companion_memory_meta(dataset_key, sha256, row_count, updated_at)
+      VALUES (?, ?, ?, ?) ON CONFLICT(dataset_key) DO UPDATE SET sha256=excluded.sha256,
+      row_count=excluded.row_count, updated_at=excluded.updated_at`)
+      .run(datasetKey, sha256, records.length, new Date().toISOString());
+    database.exec("COMMIT");
+    console.log(`Loaded ${records.length} curated wellbeing topics into AI Companion memory.`);
+  } catch (error) {
+    database.exec("ROLLBACK");
+    throw error;
+  }
+}
+
 await syncCompanionMemory();
+await syncCuratedCompanionTopics();
 await syncCreativeDatasetFiles();
 await syncAugmentedCompanionDataset();
 await syncPublicDomainLiterature();
@@ -375,6 +447,8 @@ const deleteMedia = database.prepare("DELETE FROM creative_media WHERE id = ? AN
 const insertCreativeInput = database.prepare(`INSERT INTO creative_user_inputs(id, account_id, medium, prompt, content, created_at)
   VALUES (?, ?, ?, ?, ?, ?)`);
 const listCompanionMemory = database.prepare("SELECT prompt, completion FROM ai_companion_memory");
+const listCuratedCompanionMemory = database.prepare(`SELECT topic, aliases, prompt, completion
+  FROM ai_companion_curated_memory WHERE dataset_key = ?`);
 const listCompanionLiterature = database.prepare(`SELECT title, author, translator, source_kind, source_location,
   page_start, page_end, content, rights FROM ai_companion_literature`);
 const getAugmentedCompanionCompletion = database.prepare(`SELECT completion FROM ai_companion_external_memory
@@ -397,6 +471,17 @@ function companionKnowledge() {
       augmented: true,
       terms: new Set(companionTerms(row.prompt)),
     })));
+  support.push(...listCuratedCompanionMemory.all("companion_wellbeing_topics").map((row) => {
+    const aliases = JSON.parse(row.aliases);
+    const prompt = `${row.topic} ${aliases.join(" ")} ${row.prompt}`;
+    return {
+      pair: { prompt, completion: row.completion },
+      prompt,
+      augmented: false,
+      curated: true,
+      terms: new Set(companionTerms(prompt)),
+    };
+  }));
   const literature = listCompanionLiterature.all().map((row) => ({
     row,
     terms: new Set(companionTerms(`${row.title} ${row.author} ${row.translator} ${row.source_location} ${row.content}`)),
@@ -465,7 +550,7 @@ function mediaDto(row) {
 const supportStopWords = new Set("about after again all also and are because been before being but can could did does feel feels feeling felt for from had has have help how into its just more most need not of our out please really she should some than that the their them then there these they this those think through too was were want what when where which while who why with would you your".split(" "));
 const urgentSupportPattern = /\b(suicid(?:e|al)|kill myself|end my life|want to die|don't want to live|do not want to live|self[- ]harm(?:ed|ing)?|hurt myself|harm myself|overdose|can't keep myself safe|cannot keep myself safe|not safe with myself|kill someone|hurt someone)\b/i;
 const medicalBoundaryPattern = /\b(diagnos(?:e|is|ing)|what do i have|medication|prescription|dosage|side effects)\b/i;
-const urgentSupportReply = "I’m sorry this feels so heavy. I can’t provide emergency support. If you may hurt yourself or someone else now, contact your local emergency number or go to the nearest emergency department. If you can, tell someone you trust and ask them to stay with you. You can also open Professional & crisis support for resources.";
+const urgentSupportReply = "I’m glad you told me. You deserve real-time support, and you do not have to handle this alone. If you might harm yourself or someone else soon, or cannot stay safe, contact your local emergency number or go to the nearest emergency department now. If possible, stay with someone you trust and create distance from anything that could be used to cause harm. If danger is not immediate, tell someone you trust and contact a mental-health professional or crisis line today.";
 const medicalBoundaryReply = "I can listen and offer general emotional support, but I can’t diagnose a condition or advise on medication. A licensed healthcare professional can help with those questions. If you’d like, I can help you think of what you want to ask them.";
 
 const companionAliases = new Map([

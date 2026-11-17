@@ -98,7 +98,7 @@ def main():
     output.parent.mkdir(parents=True, exist_ok=True)
 
     seen = set()
-    counts = {"support": 0, "literature": 0, "rejected": 0}
+    counts = {"support": 0, "curated_wellbeing": 0, "literature": 0, "rejected": 0}
     with output.open("w", encoding="utf-8", newline="\n") as destination:
         for source in support_files:
             if not source.exists():
@@ -118,6 +118,29 @@ def main():
                 seen.add(digest)
                 destination.write(json.dumps(training_row(prompt, answer), ensure_ascii=False) + "\n")
                 counts["support"] += 1
+
+        curated_file = root / "public" / "data" / "datasets" / "ai_companion" / "companion_wellbeing_topics.json"
+        if curated_file.exists():
+            curated = json.loads(curated_file.read_text(encoding="utf-8"))
+            for item in curated.get("records", []):
+                prompt = str(item.get("prompt", "")).strip()
+                answer = clean_answer(str(item.get("completion", "")))
+                # Emergency and urgent clinical examples stay on fixed runtime safety paths.
+                if item.get("safety_tier") not in {"general", "professional"}:
+                    counts["rejected"] += 1
+                    continue
+                if not prompt or not answer or len(prompt) > 12000 or len(answer) > 4000 or UNSAFE_RESPONSE.search(answer):
+                    counts["rejected"] += 1
+                    continue
+                topic = str(item.get("topic", "")).strip()
+                if topic:
+                    prompt = f"Topic: {topic}\n{prompt}"
+                digest = hashlib.sha256((prompt.lower() + "\0" + answer.lower()).encode("utf-8")).hexdigest()
+                if digest in seen:
+                    continue
+                seen.add(digest)
+                destination.write(json.dumps(training_row(prompt, answer), ensure_ascii=False) + "\n")
+                counts["curated_wellbeing"] += 1
 
         if literature_file.exists():
             for item in records(literature_file):
@@ -139,7 +162,7 @@ def main():
                 destination.write(json.dumps(training_row(prompt, answer), ensure_ascii=False) + "\n")
                 counts["literature"] += 1
 
-    total = counts["support"] + counts["literature"]
+    total = counts["support"] + counts["curated_wellbeing"] + counts["literature"]
     if not total:
         output.unlink(missing_ok=True)
         raise SystemExit("No eligible examples were prepared; check that the datasets and literature corpus are present.")
