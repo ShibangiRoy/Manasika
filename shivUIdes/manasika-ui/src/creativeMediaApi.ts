@@ -10,6 +10,7 @@ export type CreativeMediaItem = {
 
 export type CreativeMediaStatus = {
   providerConfigured: boolean;
+  textGenerationConfigured: boolean;
   model: string;
   archiveDays: number;
   generationLimitPerHour: number;
@@ -62,6 +63,14 @@ export function generateCreativeImage(prompt: string) {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ prompt }),
+  });
+}
+
+export function generateCreativeText(medium: "music" | "story", prompt: string) {
+  return apiRequest<{ content: string; model: string; createdAt: string }>("/api/creative/generate-text", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ medium, prompt }),
   });
 }
 

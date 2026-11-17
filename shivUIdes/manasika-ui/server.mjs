@@ -28,6 +28,8 @@ const maxImageBytes = 12 * 1024 * 1024;
 const sessionSecret = process.env.MEDIA_SESSION_SECRET || (process.env.NODE_ENV === "production" ? "" : randomBytes(32).toString("base64url"));
 const providerKey = process.env.POLLINATIONS_API_KEY || "";
 const providerModel = process.env.POLLINATIONS_IMAGE_MODEL || "black-forest-labs/flux.1-schnell";
+const textProviderKey = process.env.GROQ_API_KEY || "";
+const textProviderModel = process.env.GROQ_TEXT_MODEL || "openai/gpt-oss-20b";
 const companionModelApiUrl = process.env.COMPANION_MODEL_API_URL || "";
 const allowedOrigins = new Set((process.env.CREATIVE_MEDIA_ALLOWED_ORIGINS || "http://localhost:4173,http://127.0.0.1:4173,http://localhost:8443,http://127.0.0.1:8443")
   .split(",").map((origin) => origin.trim()).filter(Boolean));
@@ -807,6 +809,60 @@ async function generateImage(req, res, accountId) {
   }
 }
 
+async function generateCreativeText(req, res, accountId) {
+  if (!textProviderKey) {
+    return sendJson(res, 503, { error: "Lyrics and story generation are not configured on this server yet. Add GROQ_API_KEY to the backend environment." });
+  }
+  let body;
+  try { body = await readJson(req); } catch (error) { return sendJson(res, 400, { error: error.message }); }
+  const medium = body.medium;
+  const prompt = typeof body.prompt === "string" ? body.prompt.trim() : "";
+  if (!["music", "story"].includes(medium) || prompt.length < 3 || prompt.length > 4000) {
+    return sendJson(res, 400, { error: "Choose music or story and provide a prompt between 3 and 4,000 characters." });
+  }
+
+  const instructions = medium === "music"
+    ? "Write original song lyrics based on the user's brief. Return only the lyrics with a short title. Use clear verse and chorus labels when helpful. Do not imitate any living artist or reproduce existing lyrics. Keep the tone supportive and suitable for a general audience."
+    : "Write an original, polished short story based on the user's brief. Use vivid but accessible prose, a clear emotional arc, and a satisfying ending. Keep it suitable for a general audience and do not ask the user follow-up questions.";
+  let response;
+  try {
+    response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${textProviderKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: textProviderModel,
+        messages: [{ role: "system", content: instructions }, { role: "user", content: prompt }],
+        temperature: 0.8,
+        max_tokens: medium === "music" ? 700 : 1400,
+      }),
+      signal: AbortSignal.timeout(60_000),
+    });
+  } catch {
+    return sendJson(res, 502, { error: "The writing service could not be reached. Please try again." });
+  }
+  if (!response.ok) {
+    console.warn(`Groq ${medium} generation failed with HTTP ${response.status}.`);
+    const errors = {
+      401: "Groq rejected the server key. Check GROQ_API_KEY in the backend environment.",
+      404: `Groq could not find text model ${textProviderModel}. Check GROQ_TEXT_MODEL.`,
+      429: "The writing service is rate-limited right now. Please wait a little and try again.",
+    };
+    return sendJson(res, 502, { error: errors[response.status] || `The writing service failed (HTTP ${response.status}). Check the Groq key and model settings.` });
+  }
+  let result;
+  try { result = await response.json(); } catch {
+    return sendJson(res, 502, { error: "The writing service returned an unreadable response." });
+  }
+  const content = result?.choices?.[0]?.message?.content;
+  if (typeof content !== "string" || !content.trim()) {
+    return sendJson(res, 502, { error: "The writing service returned an empty response. Please try a more specific prompt." });
+  }
+  const cleaned = content.trim();
+  const createdAt = new Date().toISOString();
+  insertCreativeInput.run(randomUUID(), accountId, medium, prompt, cleaned, createdAt);
+  return sendJson(res, 200, { content: cleaned, model: textProviderModel, createdAt });
+}
+
 async function handleRequest(req, res) {
   res.setHeader("X-Content-Type-Options", "nosniff");
   res.setHeader("Referrer-Policy", "same-origin");
@@ -840,7 +896,7 @@ async function handleRequest(req, res) {
     if (!accountId) return sendJson(res, 401, { error: "Open Creative Space again to start a private archive session." });
 
     if (req.method === "GET" && pathname === "/api/creative/status") {
-      return sendJson(res, 200, { providerConfigured: Boolean(providerKey), model: providerModel, archiveDays: retentionDays, generationLimitPerHour });
+      return sendJson(res, 200, { providerConfigured: Boolean(providerKey), textGenerationConfigured: Boolean(textProviderKey), model: providerModel, archiveDays: retentionDays, generationLimitPerHour });
     }
     if (req.method === "POST" && pathname === "/api/creative/companion-reply") {
       let body;
@@ -872,6 +928,9 @@ async function handleRequest(req, res) {
     }
     if (req.method === "POST" && pathname === "/api/creative/generate") {
       return generateImage(req, res, accountId);
+    }
+    if (req.method === "POST" && pathname === "/api/creative/generate-text") {
+      return generateCreativeText(req, res, accountId);
     }
     const fileMatch = /^\/api\/creative\/media\/([0-9a-f-]{36})\/file$/i.exec(pathname);
     if (req.method === "GET" && fileMatch) {

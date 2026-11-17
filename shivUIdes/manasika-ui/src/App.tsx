@@ -3,7 +3,7 @@ import manasikaLogo from "./assets/manasika-logo.webp";
 import { getDatasetReflection } from "./cosmicDataset";
 import { getCompanionDatasetReply } from "./companionDataset";
 import { getCreativePrompt, saveCreativeOutput } from "./creativeDataset";
-import { deleteCreativeMedia, generateCreativeImage, getCreativeMediaStatus, listCreativeMedia, saveCreativeInput, startCreativeSession, type CreativeMediaItem } from "./creativeMediaApi";
+import { deleteCreativeMedia, generateCreativeImage, generateCreativeText as requestCreativeText, getCreativeMediaStatus, listCreativeMedia, saveCreativeInput, startCreativeSession, type CreativeMediaItem } from "./creativeMediaApi";
 
 type Page =
   | "home"
@@ -2083,6 +2083,11 @@ function Growth({ checkIns, activity }: { checkIns: MoodCheckIn[]; activity: Act
 function Creative() {
   const [tab, setTab] = useState("My Art");
   const [story, setStory] = useState("");
+  const [generatedLyrics, setGeneratedLyrics] = useState("");
+  const [generatedStory, setGeneratedStory] = useState("");
+  const [textGenerating, setTextGenerating] = useState<"music" | "story" | null>(null);
+  const [textGenerationStatus, setTextGenerationStatus] = useState<"checking" | "ready" | "missing-key" | "offline">("checking");
+  const [textGenerationError, setTextGenerationError] = useState("");
   const [saved, setSaved] = useState(false);
   const artPrompts = [
     "If today had a colour and shape, what would it be?",
@@ -2100,6 +2105,7 @@ function Creative() {
   const [audioFile, setAudioFile] = useState<File | null>(null);
   const [mediaItems, setMediaItems] = useState<CreativeMediaItem[]>([]);
   const [mediaConfigured, setMediaConfigured] = useState(false);
+  const [textGenerationConfigured, setTextGenerationConfigured] = useState(false);
   const [mediaAvailable, setMediaAvailable] = useState(false);
   const [mediaArchiveDays, setMediaArchiveDays] = useState(30);
   const [mediaGenerating, setMediaGenerating] = useState(false);
@@ -2131,11 +2137,16 @@ function Creative() {
       if (!active) return;
       setMediaAvailable(true);
       setMediaConfigured(status.providerConfigured);
+      setTextGenerationConfigured(status.textGenerationConfigured);
+      setTextGenerationStatus(status.textGenerationConfigured ? "ready" : "missing-key");
       setMediaArchiveDays(status.archiveDays);
       setMediaItems(items);
       if (!status.providerConfigured) setMediaError("Image generation needs a server-side provider key.");
     })().catch(() => {
-      if (active) setMediaError("The media backend is not connected to this site yet.");
+      if (active) {
+        setMediaError("The media backend is not connected to this site yet.");
+        setTextGenerationStatus("offline");
+      }
     });
     return () => { active = false; };
   }, []);
@@ -2161,6 +2172,26 @@ function Creative() {
       setMediaError(error instanceof Error ? error.message : "The image could not be generated. Please try again.");
     } finally {
       setMediaGenerating(false);
+    }
+  };
+
+  const generateCreativeText = async (medium: "music" | "story") => {
+    const prompt = medium === "music" ? (musicNote.trim() || musicPrompt.trim()) : storyPrompt.trim();
+    if (!textGenerationConfigured || textGenerating || prompt.length < 3) return;
+    setTextGenerating(medium);
+    setTextGenerationError("");
+    try {
+      const result = await requestCreativeText(medium, prompt);
+      if (medium === "music") setGeneratedLyrics(result.content);
+      else {
+        setGeneratedStory(result.content);
+        setStory(result.content);
+        setSaved(false);
+      }
+    } catch (error) {
+      setTextGenerationError(error instanceof Error ? error.message : "Text generation could not be completed. Please try again.");
+    } finally {
+      setTextGenerating(null);
     }
   };
 
@@ -2354,6 +2385,16 @@ function Creative() {
             >
               Save note
             </Button>
+            <Button onClick={() => generateCreativeText("music")} disabled={!textGenerationConfigured || textGenerating !== null} icon="spark">
+              {textGenerating === "music" ? "Writing lyrics…" : "Generate lyrics"}
+            </Button>
+            <label className="creative-prompt-field">
+              <span>Generated lyrics</span>
+              <textarea aria-label="Generated lyrics" value={generatedLyrics} readOnly rows={8} placeholder="Your generated lyrics will appear here." />
+            </label>
+            {textGenerationStatus === "missing-key" && <p className="creative-media-status" role="status">Lyrics generation needs GROQ_API_KEY on the backend.</p>}
+            {textGenerationStatus === "offline" && <p className="creative-media-status" role="status">The writing service is not connected to this site yet.</p>}
+            {textGenerationError && <p className="creative-media-status" role="alert">{textGenerationError}</p>}
           </aside>
         </div>
       )}
@@ -2381,6 +2422,16 @@ function Creative() {
             <small>WRITING PROMPT</small>
             <h2>{storyPrompt}</h2>
             <p>Fiction, memory, fragments—any form is welcome.</p>
+            <Button onClick={() => generateCreativeText("story")} disabled={!textGenerationConfigured || textGenerating !== null} icon="spark">
+              {textGenerating === "story" ? "Writing your story…" : "Generate story"}
+            </Button>
+            <label className="creative-prompt-field">
+              <span>Generated story</span>
+              <textarea aria-label="Generated story" value={generatedStory} readOnly rows={10} placeholder="Your generated story will appear here." />
+            </label>
+            {textGenerationStatus === "missing-key" && <p className="creative-media-status" role="status">Story generation needs GROQ_API_KEY on the backend.</p>}
+            {textGenerationStatus === "offline" && <p className="creative-media-status" role="status">The writing service is not connected to this site yet.</p>}
+            {textGenerationError && <p className="creative-media-status" role="alert">{textGenerationError}</p>}
           </aside>
         </div>
       )}
