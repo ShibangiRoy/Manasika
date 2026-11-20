@@ -801,9 +801,15 @@ async function generateImage(req, res, accountId) {
   if (!response.ok) {
     console.warn(`Cloudflare Workers AI image request failed with HTTP ${response.status}.`);
     const providerErrorBody = await response.clone().json().catch(() => null);
-    const providerDetail = Array.isArray(providerErrorBody?.errors)
-      ? providerErrorBody.errors.map((entry) => typeof entry?.message === "string" ? entry.message : "").filter(Boolean).join(" ").slice(0, 360)
-      : "";
+    const providerMessages = [
+      ...(Array.isArray(providerErrorBody?.errors) ? providerErrorBody.errors : []),
+      ...(Array.isArray(providerErrorBody?.messages) ? providerErrorBody.messages : []),
+    ];
+    const providerDetail = providerMessages
+      .map((entry) => typeof entry === "string" ? entry : typeof entry?.message === "string" ? entry.message : "")
+      .filter(Boolean)
+      .join(" ")
+      .slice(0, 360);
     const cloudflareErrors = {
       400: "Cloudflare rejected the image prompt or model settings. Check the prompt and image model.",
       401: "Cloudflare rejected the API token. Check the token and configured account ID.",

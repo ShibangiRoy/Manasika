@@ -8,6 +8,8 @@
     "server": "node server.mjs",
     "start": "node server.mjs",
     "build": "vite build",
+    "check:server": "node --check server.mjs",
+    "verify:deployment": "node scripts/verify-deployment.mjs",
     "preview": "vite preview",
     "format": "oxfmt"
   },

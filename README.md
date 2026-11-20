@@ -35,8 +35,11 @@ npm run preview -- --host 0.0.0.0 --port 4173
 
 1. `npm ci` installs the locked dependencies from `package-lock.json`.
 2. `npm run build` generates the static site under `dist/`.
-3. Render publishes `dist/` from `shivUIdes/manasika-ui`.
-4. The synced Render Blueprint tracks `main`; pushes to `main` trigger deployments.
+3. GitHub Actions runs the backend syntax check and Vite production build on every push or pull request to `main`.
+4. Render publishes `dist/` from `shivUIdes/manasika-ui` and rebuilds the Docker API service.
+5. The synced Render Blueprint tracks `main`; pushes to `main` trigger deployments.
+
+After a deployment, run `npm run verify:deployment` from `shivUIdes/manasika-ui` to check the public site, deployed creative controls, backend health, and presence of the Cloudflare and Groq environment settings. This check does not generate images or text, so it does not consume provider quota.
 
 Render keeps the Figma UI at [https://manasika-wellness.onrender.com](https://manasika-wellness.onrender.com) as a static site. A separate free Docker web service, `manasika-media-api`, serves the API. The frontend calls that service through `VITE_CREATIVE_MEDIA_API_URL`; the API allows requests only from the Manasika site origin. The free service has ephemeral storage: its SQLite database and generated image archive can be cleared when it sleeps, restarts, or redeploys.
 
