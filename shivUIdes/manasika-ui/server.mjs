@@ -25,6 +25,9 @@ const retentionDays = Math.min(90, Math.max(1, Number(process.env.MEDIA_RETENTIO
 const generationLimitPerHour = Math.min(10, Math.max(1, Number(process.env.MEDIA_GENERATIONS_PER_HOUR || 3)));
 const globalGenerationLimitPerHour = Math.min(100, Math.max(1, Number(process.env.MEDIA_GLOBAL_GENERATIONS_PER_HOUR || 20)));
 const maxImageBytes = 12 * 1024 * 1024;
+const cloudflarePromptPrefix = "Create an original image from this brief: ";
+const cloudflarePromptDirection = " Visual direction: polished and gently uplifting, with a clear focal point, soft natural light, refined detail, and balanced composition. Blend sapphire blue and turquoise with warm cottagecore accents only where they suit the requested subject. Keep the requested subject central and include no lettering or logos.";
+const maxCloudflarePromptLength = 2048;
 const sessionSecret = process.env.MEDIA_SESSION_SECRET || (process.env.NODE_ENV === "production" ? "" : randomBytes(32).toString("base64url"));
 const cloudflareAccountId = (process.env.CLOUDFLARE_ACCOUNT_ID || "").trim();
 const cloudflareApiToken = (process.env.CLOUDFLARE_API_TOKEN || "").trim();
@@ -774,8 +777,8 @@ async function generateImage(req, res, accountId) {
   let body;
   try { body = await readJson(req); } catch (error) { return sendJson(res, 400, { error: error.message }); }
   const prompt = typeof body.prompt === "string" ? body.prompt.trim() : "";
-  if (prompt.length < 20 || prompt.length > 2048) {
-    return sendJson(res, 400, { error: "Use an image prompt between 20 and 2,048 characters." });
+  if (prompt.length < 20 || prompt.length > maxCloudflarePromptLength) {
+    return sendJson(res, 400, { error: `Use an image prompt between 20 and ${maxCloudflarePromptLength} characters.` });
   }
   const hourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
   if (countRecent.get(accountId, hourAgo).count >= generationLimitPerHour) {
@@ -785,6 +788,8 @@ async function generateImage(req, res, accountId) {
     return sendJson(res, 429, { error: "The image service is busy right now. Please try again later." });
   }
 
+  const styledPrompt = `${cloudflarePromptPrefix}${prompt}${cloudflarePromptDirection}`;
+  const providerPrompt = styledPrompt.length <= maxCloudflarePromptLength ? styledPrompt : prompt;
   const url = `https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(cloudflareAccountId)}/ai/run/${imageModel}`;
 
   let response;
@@ -792,7 +797,11 @@ async function generateImage(req, res, accountId) {
     response = await fetch(url, {
       method: "POST",
       headers: { Authorization: `Bearer ${cloudflareApiToken}`, "Content-Type": "application/json", Accept: "application/json" },
-      body: JSON.stringify({ prompt, steps: 4, seed: randomBytes(4).readUInt32BE(0) }),
+      body: JSON.stringify({
+        prompt: providerPrompt,
+        steps: 4,
+        seed: randomBytes(4).readUInt32BE(0),
+      }),
       signal: AbortSignal.timeout(120_000),
     });
   } catch {
