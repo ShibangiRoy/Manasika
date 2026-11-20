@@ -3,7 +3,7 @@ import manasikaLogo from "./assets/manasika-logo.webp";
 import { getDatasetReflection } from "./cosmicDataset";
 import { getCompanionDatasetReply } from "./companionDataset";
 import { getCreativePrompt, saveCreativeOutput } from "./creativeDataset";
-import { deleteCreativeMedia, generateCreativeImage, generateCreativeText as requestCreativeText, getCreativeMediaStatus, listCreativeMedia, saveCreativeInput, startCreativeSession, type CreativeMediaItem } from "./creativeMediaApi";
+import { deleteCreativeMedia, generateCreativeImage, generateCreativeText as requestCreativeText, getCreativeMediaStatus, getCreativeTrainingConsent, listCreativeMedia, saveCreativeInput, saveTrainingArtwork, setCreativeTrainingConsent, startCreativeSession, type CreativeMediaItem } from "./creativeMediaApi";
 
 type Page =
   | "home"
@@ -2110,6 +2110,9 @@ function Creative() {
   const [mediaArchiveDays, setMediaArchiveDays] = useState(30);
   const [mediaGenerating, setMediaGenerating] = useState(false);
   const [mediaError, setMediaError] = useState("");
+  const [trainingConsent, setTrainingConsent] = useState(false);
+  const [trainingConsentSaving, setTrainingConsentSaving] = useState(false);
+  const [trainingConsentMessage, setTrainingConsentMessage] = useState("");
 
   useEffect(() => {
     let active = true;
@@ -2133,7 +2136,7 @@ function Creative() {
     let active = true;
     (async () => {
       await startCreativeSession();
-      const [status, items] = await Promise.all([getCreativeMediaStatus(), listCreativeMedia()]);
+      const [status, items, training] = await Promise.all([getCreativeMediaStatus(), listCreativeMedia(), getCreativeTrainingConsent()]);
       if (!active) return;
       setMediaAvailable(true);
       setMediaConfigured(status.providerConfigured);
@@ -2141,6 +2144,7 @@ function Creative() {
       setTextGenerationStatus(status.textGenerationConfigured ? "ready" : "missing-key");
       setMediaArchiveDays(status.archiveDays);
       setMediaItems(items);
+      setTrainingConsent(training.enabled);
       if (!status.providerConfigured) setMediaError("Image generation needs a server-side provider key.");
     })().catch(() => {
       if (active) {
