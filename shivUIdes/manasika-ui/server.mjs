@@ -18,7 +18,9 @@ try {
 const distDir = path.resolve(process.env.MANASIKA_DIST_DIR || path.join(appRoot, "dist"));
 const dataDir = path.resolve(process.env.MANASIKA_MEDIA_DATA_DIR || path.join(appRoot, "data"));
 const mediaDir = path.join(dataDir, "media");
+const trainingMediaDir = path.join(dataDir, "training-media");
 const dbPath = path.resolve(process.env.MANASIKA_MEDIA_DB_PATH || path.join(dataDir, "creative.sqlite"));
+const trainingDbPath = path.resolve(process.env.MANASIKA_TRAINING_DB_PATH || path.join(dataDir, "creative-training.sqlite"));
 const port = Number(process.env.PORT || 4174);
 const host = process.env.HOST || (process.env.NODE_ENV === "production" ? "0.0.0.0" : "127.0.0.1");
 const retentionDays = Math.min(90, Math.max(1, Number(process.env.MEDIA_RETENTION_DAYS || 30)));
@@ -51,6 +53,8 @@ if (!sessionSecret) {
 }
 
 await mkdir(mediaDir, { recursive: true });
+await mkdir(trainingMediaDir, { recursive: true });
+await mkdir(path.dirname(trainingDbPath), { recursive: true });
 const database = new DatabaseSync(dbPath);
 database.exec(`
   PRAGMA journal_mode = WAL;
@@ -145,6 +149,38 @@ database.exec(`
     updated_at TEXT NOT NULL
   );
 `);
+const trainingDatabase = new DatabaseSync(trainingDbPath);
+trainingDatabase.exec(`
+  PRAGMA journal_mode = WAL;
+  CREATE TABLE IF NOT EXISTS creative_training_consent (
+    account_id TEXT PRIMARY KEY,
+    enabled INTEGER NOT NULL CHECK (enabled IN (0, 1)),
+    updated_at TEXT NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS creative_training_examples (
+    id TEXT PRIMARY KEY,
+    account_id TEXT NOT NULL,
+    medium TEXT NOT NULL CHECK (medium IN ('image', 'music', 'story')),
+    source TEXT NOT NULL CHECK (source IN ('saved_input', 'generated_text', 'generated_image', 'uploaded_artwork')),
+    prompt TEXT NOT NULL,
+    content TEXT NOT NULL DEFAULT '',
+    asset_path TEXT,
+    created_at TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS creative_training_medium_created
+    ON creative_training_examples(medium, created_at DESC);
+  CREATE INDEX IF NOT EXISTS creative_training_account
+    ON creative_training_examples(account_id, created_at DESC);
+`);
+const getTrainingConsent = trainingDatabase.prepare("SELECT enabled FROM creative_training_consent WHERE account_id = ?");
+const insertTrainingConsent = trainingDatabase.prepare(`INSERT INTO creative_training_consent(account_id, enabled, updated_at)
+  VALUES (?, ?, ?) ON CONFLICT(account_id) DO UPDATE SET enabled=excluded.enabled, updated_at=excluded.updated_at`);
+const insertTrainingExample = trainingDatabase.prepare(`INSERT INTO creative_training_examples
+  (id, account_id, medium, source, prompt, content, asset_path, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`);
+const listTrainingExamples = trainingDatabase.prepare(`SELECT example.prompt, example.content FROM creative_training_examples AS example
+  INNER JOIN creative_training_consent AS consent ON consent.account_id = example.account_id AND consent.enabled = 1
+  WHERE example.medium = ? AND example.account_id != ? ORDER BY example.created_at DESC LIMIT 500`);
+const deleteTrainingExamples = trainingDatabase.prepare("DELETE FROM creative_training_examples WHERE account_id = ?");
 
 const creativeDatasetFiles = [
   { key: "creative_story_narratives", medium: "image", file: "creative_story_narratives.json" },
@@ -533,6 +569,48 @@ async function readJson(req, limit = 16_000) {
   try { return JSON.parse(raw || "{}"); } catch { throw new Error("Request JSON is invalid."); }
 }
 
+function trainingEnabled(accountId) {
+  return getTrainingConsent.get(accountId)?.enabled === 1;
+}
+
+function redactTrainingText(value) {
+  return value.replace(/[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}/g, "[email]")
+    .replace(/\b(?:https?:\/\/|www\.)\S+/gi, "[link]")
+    .replace(/(?:\+?\d[\d\s().-]{7,}\d)/g, "[phone]")
+    .replace(/\s+/g, " ").trim();
+}
+
+function trainingInspiration(medium, prompt, accountId) {
+  const terms = new Set((prompt.toLowerCase().match(/[a-z]{3,}/g) || []).filter((word) => !supportStopWords.has(word)));
+  if (!terms.size) return "";
+  return listTrainingExamples.all(medium, accountId)
+    .map((example) => {
+      const text = redactTrainingText(`${example.prompt} ${example.content}`).slice(0, 700);
+      const exampleTerms = new Set((text.toLowerCase().match(/[a-z]{3,}/g) || []).filter((word) => !supportStopWords.has(word)));
+      const overlap = [...terms].filter((term) => exampleTerms.has(term)).length;
+      return { text, score: overlap / terms.size };
+    })
+    .filter((example) => example.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 2)
+    .map((example) => example.text.slice(0, 220))
+    .join("\n");
+}
+
+function storeTrainingExample(accountId, medium, source, prompt, content = "", assetPath = null) {
+  if (!trainingEnabled(accountId)) return false;
+  const safePrompt = redactTrainingText(prompt).slice(0, 8_000);
+  const safeContent = redactTrainingText(content).slice(0, 24_000);
+  if (!safePrompt || (!safeContent && !assetPath)) return false;
+  try {
+    insertTrainingExample.run(randomUUID(), accountId, medium, source, safePrompt, safeContent, assetPath, new Date().toISOString());
+    return true;
+  } catch (error) {
+    console.warn("Could not update the opt-in creative example database:", error?.message || error);
+    return false;
+  }
+}
+
 async function removeExpiredMedia() {
   const expired = database.prepare("SELECT id, file_path FROM creative_media WHERE expires_at <= ?").all(new Date().toISOString());
   if (!expired.length) return;
@@ -788,7 +866,9 @@ async function generateImage(req, res, accountId) {
     return sendJson(res, 429, { error: "The image service is busy right now. Please try again later." });
   }
 
-  const styledPrompt = `${cloudflarePromptPrefix}${prompt}${cloudflarePromptDirection}`;
+  const inspiration = trainingInspiration("image", prompt, accountId);
+  const inspirationText = inspiration ? ` Use these opt-in community examples only for broad visual inspiration; do not reproduce details: ${inspiration}.` : "";
+  const styledPrompt = `${cloudflarePromptPrefix}${prompt}${inspirationText}${cloudflarePromptDirection}`;
   const providerPrompt = styledPrompt.length <= maxCloudflarePromptLength ? styledPrompt : prompt;
   const url = `https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(cloudflareAccountId)}/ai/run/${imageModel}`;
 
@@ -852,6 +932,16 @@ async function generateImage(req, res, accountId) {
     const createdAt = new Date().toISOString();
     const expiresAt = new Date(Date.now() + retentionDays * 24 * 60 * 60 * 1000).toISOString();
     insertMedia.run(id, accountId, prompt, imageModel, mimeType, filePath, createdAt, expiresAt);
+    if (trainingEnabled(accountId)) {
+      const trainingPath = path.join(trainingMediaDir, `${id}.jpg`);
+      try {
+        await writeFile(trainingPath, bytes, { flag: "wx" });
+        storeTrainingExample(accountId, "image", "generated_image", prompt, "", trainingPath);
+      } catch (error) {
+        await rm(trainingPath, { force: true }).catch(() => {});
+        console.warn("Could not add the generated image to the opt-in training database:", error?.message || error);
+      }
+    }
     return sendJson(res, 201, mediaDto({ id, prompt, model: imageModel, mime_type: mimeType, created_at: createdAt, expires_at: expiresAt }));
   } catch {
     await rm(filePath, { force: true }).catch(() => {});
@@ -871,6 +961,7 @@ async function generateCreativeText(req, res, accountId) {
     return sendJson(res, 400, { error: "Choose music or story and provide a prompt between 3 and 4,000 characters." });
   }
 
+  const inspiration = trainingInspiration(medium, prompt, accountId);
   const instructions = medium === "music"
     ? "Write original song lyrics based on the user's brief. Return only the lyrics with a short title. Use clear verse and chorus labels when helpful. Do not imitate any living artist or reproduce existing lyrics. Keep the tone supportive and suitable for a general audience."
     : "Write an original, polished short story based on the user's brief. Use vivid but accessible prose, a clear emotional arc, and a satisfying ending. Keep it suitable for a general audience and do not ask the user follow-up questions.";
@@ -881,7 +972,10 @@ async function generateCreativeText(req, res, accountId) {
       headers: { Authorization: `Bearer ${textProviderKey}`, "Content-Type": "application/json" },
       body: JSON.stringify({
         model: textProviderModel,
-        messages: [{ role: "system", content: instructions }, { role: "user", content: prompt }],
+        messages: [
+          { role: "system", content: `${instructions}${inspiration ? " Use the opt-in examples below only to learn broad structural or stylistic patterns; never copy or quote them. They may be incomplete or unrelated, so prioritize the user's brief.\n\nOpt-in examples:\n" + inspiration : ""}` },
+          { role: "user", content: prompt },
+        ],
         temperature: 0.8,
         max_tokens: medium === "music" ? 700 : 1400,
       }),
@@ -910,6 +1004,7 @@ async function generateCreativeText(req, res, accountId) {
   const cleaned = content.trim();
   const createdAt = new Date().toISOString();
   insertCreativeInput.run(randomUUID(), accountId, medium, prompt, cleaned, createdAt);
+  storeTrainingExample(accountId, medium, "generated_text", prompt, cleaned);
   return sendJson(res, 200, { content: cleaned, model: textProviderModel, createdAt });
 }
 
@@ -955,6 +1050,52 @@ async function handleRequest(req, res) {
         generationLimitPerHour,
       });
     }
+    if (req.method === "GET" && pathname === "/api/creative/training/consent") {
+      return sendJson(res, 200, { enabled: trainingEnabled(accountId) });
+    }
+    if (req.method === "POST" && pathname === "/api/creative/training/consent") {
+      let body;
+      try { body = await readJson(req); } catch (error) { return sendJson(res, 400, { error: error.message }); }
+      if (typeof body.enabled !== "boolean") return sendJson(res, 400, { error: "Choose whether to enable creative example sharing." });
+      insertTrainingConsent.run(accountId, Number(body.enabled), new Date().toISOString());
+      if (!body.enabled) {
+        const records = trainingDatabase.prepare("SELECT asset_path FROM creative_training_examples WHERE account_id = ? AND asset_path IS NOT NULL").all(accountId);
+        deleteTrainingExamples.run(accountId);
+        await Promise.all(records.map((record) => rm(record.asset_path, { force: true }).catch(() => {})));
+      }
+      return sendJson(res, 200, { enabled: body.enabled, removed: !body.enabled });
+    }
+    if (req.method === "POST" && pathname === "/api/creative/training/artwork") {
+      if (!trainingEnabled(accountId)) return sendJson(res, 403, { error: "Opt in to creative example sharing before storing artwork in the training database." });
+      let body;
+      try { body = await readJson(req, 17_000_000); } catch (error) { return sendJson(res, 400, { error: error.message }); }
+      const prompt = typeof body.prompt === "string" ? body.prompt.trim() : "";
+      const dataUrl = typeof body.data === "string" ? body.data : "";
+      const match = /^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/]+=*)$/.exec(dataUrl);
+      if (!match || !prompt || prompt.length > 8_000) return sendJson(res, 400, { error: "Upload a PNG, JPEG, or WebP image with a short prompt." });
+      const bytes = Buffer.from(match[2], "base64");
+      if (!bytes.length || bytes.length > maxImageBytes) return sendJson(res, 400, { error: "Artwork must be smaller than 12 MB." });
+      const signatures = {
+        "image/png": bytes.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])),
+        "image/jpeg": bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff,
+        "image/webp": bytes.subarray(0, 4).toString() === "RIFF" && bytes.subarray(8, 12).toString() === "WEBP",
+      };
+      if (!signatures[match[1]]) return sendJson(res, 400, { error: "The uploaded file does not match its image type." });
+      const id = randomUUID();
+      const extension = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp" }[match[1]];
+      const assetPath = path.join(trainingMediaDir, `${id}.${extension}`);
+      try {
+        await writeFile(assetPath, bytes, { flag: "wx" });
+        if (!storeTrainingExample(accountId, "image", "uploaded_artwork", prompt, "", assetPath)) {
+          await rm(assetPath, { force: true });
+          return sendJson(res, 500, { error: "The artwork could not be added to the training database." });
+        }
+        return sendJson(res, 201, { id, stored: true });
+      } catch {
+        await rm(assetPath, { force: true }).catch(() => {});
+        return sendJson(res, 500, { error: "The artwork could not be added to the training database." });
+      }
+    }
     if (req.method === "POST" && pathname === "/api/creative/companion-reply") {
       let body;
       try { body = await readJson(req); } catch (error) { return sendJson(res, 400, { error: error.message }); }
@@ -981,6 +1122,7 @@ async function handleRequest(req, res) {
       const id = randomUUID();
       const createdAt = new Date().toISOString();
       insertCreativeInput.run(id, accountId, medium, prompt, content, createdAt);
+      storeTrainingExample(accountId, medium, "saved_input", prompt, content);
       return sendJson(res, 201, { id, stored: true, createdAt });
     }
     if (req.method === "POST" && pathname === "/api/creative/generate") {
@@ -1058,6 +1200,7 @@ server.listen(port, host, () => {
 function closeServer() {
   server.close(() => {
     database.close();
+    trainingDatabase.close();
     process.exit(0);
   });
 }

@@ -2755,6 +2755,42 @@
   font-size: 10px;
   line-height: 1.6;
 }
+.creative-training-optin {
+  margin: -7px 0 20px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.72);
+}
+.creative-training-optin label {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  cursor: pointer;
+}
+.creative-training-optin input {
+  flex: 0 0 auto;
+  margin-top: 2px;
+  accent-color: var(--lavender-deep);
+}
+.creative-training-optin span {
+  display: grid;
+  gap: 3px;
+}
+.creative-training-optin strong {
+  color: var(--ink);
+  font-size: 10px;
+}
+.creative-training-optin small,
+.creative-training-optin p {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 9px;
+  line-height: 1.55;
+}
+.creative-training-optin p {
+  padding: 7px 0 0 24px;
+}
 .creative-media-section {
   margin-top: 18px;
   padding: 22px;

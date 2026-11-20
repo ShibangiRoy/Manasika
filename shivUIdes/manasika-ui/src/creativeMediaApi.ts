@@ -53,6 +53,35 @@ export function getCreativeMediaStatus() {
   return apiRequest<CreativeMediaStatus>("/api/creative/status");
 }
 
+export async function getCreativeTrainingConsent() {
+  await startCreativeSession();
+  return apiRequest<{ enabled: boolean }>("/api/creative/training/consent");
+}
+
+export async function setCreativeTrainingConsent(enabled: boolean) {
+  await startCreativeSession();
+  return apiRequest<{ enabled: boolean; removed: boolean }>("/api/creative/training/consent", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ enabled }),
+  });
+}
+
+export async function saveTrainingArtwork(file: File, prompt: string) {
+  await startCreativeSession();
+  const data = await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => typeof reader.result === "string" ? resolve(reader.result) : reject(new Error("The artwork could not be read."));
+    reader.onerror = () => reject(new Error("The artwork could not be read."));
+    reader.readAsDataURL(file);
+  });
+  return apiRequest<{ id: string; stored: boolean }>("/api/creative/training/artwork", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ prompt, data }),
+  });
+}
+
 export async function listCreativeMedia() {
   const result = await apiRequest<{ items: CreativeMediaItem[] }>("/api/creative/media");
   return result.items;

@@ -2205,7 +2205,7 @@ function Creative() {
   };
 
   const saveArtwork = async () => {
-    const [didSave, didPersist] = await Promise.all([
+    const [didSave, didPersist, didTrainArtwork] = await Promise.all([
       saveCreativeOutput({
       kind: "image",
       prompt: artPrompt,
@@ -2213,9 +2213,27 @@ function Creative() {
       ...(artworkFile ? { file: artworkFile, fileName: artworkFile.name, mimeType: artworkFile.type } : {}),
       }),
       saveCreativeInput("image", artPrompt).then(() => true).catch(() => false),
+      trainingConsent && artworkFile ? saveTrainingArtwork(artworkFile, artPrompt).then(() => true).catch(() => false) : Promise.resolve(true),
     ]);
     setSaved(didSave);
-    setMediaError(didPersist ? "" : "Saved on this device; the permanent archive is currently unavailable.");
+    setMediaError(!didPersist ? "Saved on this device; the permanent archive is currently unavailable."
+      : !didTrainArtwork ? "Saved privately, but this artwork could not be added to the opt-in example database." : "");
+  };
+
+  const updateTrainingConsent = async (enabled: boolean) => {
+    setTrainingConsentSaving(true);
+    setTrainingConsentMessage("");
+    try {
+      await setCreativeTrainingConsent(enabled);
+      setTrainingConsent(enabled);
+      setTrainingConsentMessage(enabled
+        ? "Sharing is on. New saved prompts and creations can guide future generations."
+        : "Sharing is off. Your contributed examples and stored training images were removed.");
+    } catch (error) {
+      setTrainingConsentMessage(error instanceof Error ? error.message : "Your sharing preference could not be saved.");
+    } finally {
+      setTrainingConsentSaving(false);
+    }
   };
 
   const saveMusicNote = async () => {
@@ -2268,6 +2286,14 @@ function Creative() {
             <span>{t}</span>
           </button>
         ))}
+      </div>
+      <div className="creative-training-optin">
+        <label>
+          <input type="checkbox" checked={trainingConsent} disabled={trainingConsentSaving || !mediaAvailable}
+            onChange={(event) => void updateTrainingConsent(event.target.checked)} />
+          <span><strong>Help improve future creations</strong><small>Optional: saved prompts and notes, generated lyrics, stories and images, and artwork you save can guide future generations for everyone. Turn this off to remove your contributions. Avoid personal details.</small></span>
+        </label>
+        {trainingConsentMessage && <p role="status">{trainingConsentMessage}</p>}
       </div>
       {tab === "My Art" && (
         <>
