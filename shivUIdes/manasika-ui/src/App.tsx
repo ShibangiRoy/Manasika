@@ -2100,7 +2100,7 @@ function Creative() {
   const [artPrompt, setArtPrompt] = useState(artPrompts[0]);
   const [musicPrompt, setMusicPrompt] = useState("");
   const [musicNote, setMusicNote] = useState("");
-  const [storyPrompt, setStoryPrompt] = useState("Write about the version of you who kept going.");
+  const [storyPrompt, setStoryPrompt] = useState("Build a story outline with a driven protagonist, a believable antagonist, a central conflict, and a sequence of plot beats leading to a meaningful resolution.");
   const [artworkFile, setArtworkFile] = useState<File | null>(null);
   const [audioFile, setAudioFile] = useState<File | null>(null);
   const [mediaItems, setMediaItems] = useState<CreativeMediaItem[]>([]);

@@ -15,12 +15,12 @@ type SavedCreativeOutput = {
 
 const DB_NAME = "manasika-creative-space-memory";
 const DB_VERSION = 2;
-const DATASET_VERSION = "creative-space-datasets-2026-11-16-v3";
+const DATASET_VERSION = "creative-space-datasets-2026-11-20-v4";
 const LEGACY_DATASET_URL = `${import.meta.env.BASE_URL}data/ai_media_generation_prompts.json`;
 const DATASET_FILES: Record<CreativeMedium, string> = {
   image: `${import.meta.env.BASE_URL}data/datasets/creative_space/creative_story_narratives.json`,
   music: `${import.meta.env.BASE_URL}data/datasets/creative_space/image_gen_data_engineering.json`,
-  story: `${import.meta.env.BASE_URL}data/datasets/creative_space/lyric_generation_prompts.json`,
+  story: `${import.meta.env.BASE_URL}data/datasets/creative_space/creative_story_narratives.json`,
 };
 const EXCLUDED_META = /\b(explain|analysis|analy[sz]e|critique|technical guide|methodology|workflow|architecture|security|policy|audit|evaluate|compare|comparison|research|strategy|prompt injection|implementation)\b/i;
 
@@ -83,7 +83,7 @@ function formatDatasetPrompt(sourcePrompt: string, completion: string, kind: Cre
   if (kind === "music") {
     return `Create an original music concept inspired by this creative brief: ${base}. Describe the mood, instrumentation, tempo, and dynamics clearly.`;
   }
-  return `Write an original story inspired by this lyric-generation idea: ${base}. Give it a vivid setting, a distinct voice, and a thoughtful ending.`;
+  return `Develop this premise into a story outline: ${base}. Define a compelling protagonist with a clear goal, strengths, and an inner conflict; an antagonist with a believable motive and an opposing goal; and any essential supporting characters. Map the setup, inciting incident, rising complications, turning point, climax, and resolution. Give each character a distinct role, make the stakes clear, and end with a meaningful change.`;
 }
 
 function extractStructuredPrompt(completion: string): string {
