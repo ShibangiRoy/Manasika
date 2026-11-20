@@ -26,8 +26,9 @@ const generationLimitPerHour = Math.min(10, Math.max(1, Number(process.env.MEDIA
 const globalGenerationLimitPerHour = Math.min(100, Math.max(1, Number(process.env.MEDIA_GLOBAL_GENERATIONS_PER_HOUR || 20)));
 const maxImageBytes = 12 * 1024 * 1024;
 const sessionSecret = process.env.MEDIA_SESSION_SECRET || (process.env.NODE_ENV === "production" ? "" : randomBytes(32).toString("base64url"));
-const providerKey = process.env.POLLINATIONS_API_KEY || "";
-const providerModel = process.env.POLLINATIONS_IMAGE_MODEL || "black-forest-labs/flux.1-schnell";
+const cloudflareAccountId = process.env.CLOUDFLARE_ACCOUNT_ID || "";
+const cloudflareApiToken = process.env.CLOUDFLARE_API_TOKEN || "";
+const imageModel = process.env.CLOUDFLARE_IMAGE_MODEL || "@cf/black-forest-labs/flux-1-schnell";
 const textProviderKey = process.env.GROQ_API_KEY || "";
 const textProviderModel = process.env.GROQ_TEXT_MODEL || "openai/gpt-oss-20b";
 const companionGroqKey = process.env.COMPANION_GROQ_API_KEY || textProviderKey;
@@ -767,14 +768,14 @@ async function ensureSession(req) {
 }
 
 async function generateImage(req, res, accountId) {
-  if (!providerKey) {
-    return sendJson(res, 503, { error: "Image generation is not configured on this server yet." });
+  if (!cloudflareAccountId || !cloudflareApiToken) {
+    return sendJson(res, 503, { error: "Image generation needs CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN on the server." });
   }
   let body;
   try { body = await readJson(req); } catch (error) { return sendJson(res, 400, { error: error.message }); }
   const prompt = typeof body.prompt === "string" ? body.prompt.trim() : "";
-  if (prompt.length < 20 || prompt.length > 8000) {
-    return sendJson(res, 400, { error: "Use an image prompt between 20 and 8,000 characters." });
+  if (prompt.length < 20 || prompt.length > 2048) {
+    return sendJson(res, 400, { error: "Use an image prompt between 20 and 2,048 characters." });
   }
   const hourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
   if (countRecent.get(accountId, hourAgo).count >= generationLimitPerHour) {
@@ -784,61 +785,54 @@ async function generateImage(req, res, accountId) {
     return sendJson(res, 429, { error: "The image service is busy right now. Please try again later." });
   }
 
-  const refinedPrompt = `Create a polished, high-quality original image with clear subject detail and a balanced composition. ${prompt}`;
-  const url = new URL(`https://gen.pollinations.ai/image/${encodeURIComponent(refinedPrompt)}`);
-  url.searchParams.set("model", providerModel);
-  url.searchParams.set("width", "1024");
-  url.searchParams.set("height", "1024");
-  url.searchParams.set("seed", String(randomBytes(4).readUInt32BE(0)));
+  const url = `https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(cloudflareAccountId)}/ai/run/${imageModel}`;
 
   let response;
   try {
     response = await fetch(url, {
-      headers: { Authorization: `Bearer ${providerKey}`, Accept: "image/png, image/jpeg, image/webp" },
+      method: "POST",
+      headers: { Authorization: `Bearer ${cloudflareApiToken}`, "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({ prompt, steps: 4, seed: randomBytes(4).readUInt32BE(0) }),
       signal: AbortSignal.timeout(120_000),
     });
   } catch {
-    return sendJson(res, 502, { error: "The image service could not be reached. Please try again." });
+    return sendJson(res, 502, { error: "Cloudflare Workers AI could not be reached. Please try again." });
   }
   if (!response.ok) {
-    console.warn(`Pollinations image request failed with HTTP ${response.status}.`);
-    const providerErrors = {
-      401: "Pollinations rejected the server key. Use an active secret key beginning with sk_; an app key beginning with pk_ cannot authenticate generation requests.",
-      402: "Pollinations reports that this key or account has no image-generation budget remaining.",
-      403: `This Pollinations key is not allowed to use ${providerModel}. Enable image generation or allow this model in the key settings.`,
-      404: `Pollinations could not find image model ${providerModel}. Check POLLINATIONS_IMAGE_MODEL.`,
-      429: "Pollinations rate-limited this image request. Wait briefly, then try again.",
+    console.warn(`Cloudflare Workers AI image request failed with HTTP ${response.status}.`);
+    const cloudflareErrors = {
+      400: "Cloudflare rejected the image prompt or model settings. Check the prompt and image model.",
+      401: "Cloudflare rejected the API token. Check the token and configured account ID.",
+      403: "This Cloudflare token or account is not permitted to use Workers AI. Check Workers AI permissions and usage limits.",
+      404: `Cloudflare could not find image model ${imageModel}. Check CLOUDFLARE_IMAGE_MODEL and the account ID.`,
+      429: "Cloudflare Workers AI is rate-limited or its daily free allocation is exhausted. Try again later.",
     };
-    return sendJson(res, 502, {
-      error: providerErrors[response.status] || `Pollinations image generation failed (HTTP ${response.status}). Check the provider status and key permissions.`,
-    });
+    return sendJson(res, 502, { error: cloudflareErrors[response.status] || `Cloudflare Workers AI failed (HTTP ${response.status}). Check the token, account ID, model, and daily usage.` });
   }
 
-  const mimeType = response.headers.get("content-type")?.split(";")[0]?.toLowerCase() || "";
-  const extension = mimeType === "image/png" ? ".png" : mimeType === "image/webp" ? ".webp" : mimeType === "image/jpeg" ? ".jpg" : "";
-  if (!extension) return sendJson(res, 502, { error: "The image service returned an unsupported file type." });
-  const chunks = [];
-  let totalBytes = 0;
+  let providerResult;
   try {
-    for await (const chunk of response.body) {
-      totalBytes += chunk.length;
-      if (totalBytes > maxImageBytes) return sendJson(res, 502, { error: "The generated image was too large to archive." });
-      chunks.push(chunk);
-    }
+    providerResult = await response.json();
   } catch {
-    return sendJson(res, 502, { error: "The generated image could not be downloaded completely." });
+    return sendJson(res, 502, { error: "Cloudflare returned an unreadable image response." });
   }
-  const bytes = Buffer.concat(chunks, totalBytes);
+  const encodedImage = providerResult?.result?.image;
+  if (typeof encodedImage !== "string" || !/^[A-Za-z0-9+/]+={0,2}$/.test(encodedImage)) {
+    return sendJson(res, 502, { error: "Cloudflare did not return a valid generated image." });
+  }
+  const bytes = Buffer.from(encodedImage, "base64");
+  if (bytes.length > maxImageBytes) return sendJson(res, 502, { error: "The generated image was too large to archive." });
   if (!bytes.length) return sendJson(res, 502, { error: "The generated image was empty." });
 
   const id = randomUUID();
-  const filePath = path.join(mediaDir, `${id}${extension}`);
+  const mimeType = "image/jpeg";
+  const filePath = path.join(mediaDir, `${id}.jpg`);
   try {
     await writeFile(filePath, bytes, { flag: "wx" });
     const createdAt = new Date().toISOString();
     const expiresAt = new Date(Date.now() + retentionDays * 24 * 60 * 60 * 1000).toISOString();
-    insertMedia.run(id, accountId, prompt, providerModel, mimeType, filePath, createdAt, expiresAt);
-    return sendJson(res, 201, mediaDto({ id, prompt, model: providerModel, mime_type: mimeType, created_at: createdAt, expires_at: expiresAt }));
+    insertMedia.run(id, accountId, prompt, imageModel, mimeType, filePath, createdAt, expiresAt);
+    return sendJson(res, 201, mediaDto({ id, prompt, model: imageModel, mime_type: mimeType, created_at: createdAt, expires_at: expiresAt }));
   } catch {
     await rm(filePath, { force: true }).catch(() => {});
     return sendJson(res, 500, { error: "The image could not be archived. Please try again." });
@@ -933,10 +927,10 @@ async function handleRequest(req, res) {
 
     if (req.method === "GET" && pathname === "/api/creative/status") {
       return sendJson(res, 200, {
-        providerConfigured: Boolean(providerKey),
+        providerConfigured: Boolean(cloudflareAccountId && cloudflareApiToken),
         textGenerationConfigured: Boolean(textProviderKey),
         companionModelConfigured: Boolean(companionGroqKey || companionModelApiUrl),
-        model: providerModel,
+        model: imageModel,
         archiveDays: retentionDays,
         generationLimitPerHour,
       });

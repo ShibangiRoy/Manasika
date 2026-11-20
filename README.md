@@ -84,7 +84,7 @@ The development UI proxies `/api` requests to the local media server. Use two te
 ```powershell
 npm ci
 Copy-Item .env.example .env
-# Edit .env and set POLLINATIONS_API_KEY and a long random MEDIA_SESSION_SECRET
+# Edit .env and set CLOUDFLARE_ACCOUNT_ID, CLOUDFLARE_API_TOKEN, GROQ_API_KEY, and a long random MEDIA_SESSION_SECRET
 npm run server
 ```
 
@@ -96,13 +96,13 @@ npm run dev -- --host 0.0.0.0 --port 4173
 
 Open [http://localhost:4173](http://localhost:4173). For a production-style local run, build first and then use `npm start`; the server serves both `dist/` and the API on port 4174 by default. `HOST`, `PORT`, `MANASIKA_MEDIA_DATA_DIR`, `MEDIA_RETENTION_DAYS`, `MEDIA_GENERATIONS_PER_HOUR`, and `MEDIA_GLOBAL_GENERATIONS_PER_HOUR` can be configured in `.env`. Generated files and SQLite data live in `data/`, which is ignored by Git. Keep a durable mounted volume at the configured data path if deploying the backend in a container.
 
-The app expects a Pollinations image API key configured as `POLLINATIONS_API_KEY`; image generation remains disabled until configured. Set it only as a server environment secret. The default model is `black-forest-labs/flux.1-schnell`; override with `POLLINATIONS_IMAGE_MODEL` if needed. See the [Pollinations image API documentation](https://github.com/pollinations/pollinations/blob/main/gen.pollinations.ai/src/docs/image-generation.md) and [API docs](https://gen.pollinations.ai/docs).
+My Art uses Cloudflare Workers AI image generation. Configure `CLOUDFLARE_ACCOUNT_ID` and the secret `CLOUDFLARE_API_TOKEN` on the `manasika-media-api` service; create a token with Workers AI permission. The default model is `@cf/black-forest-labs/flux-1-schnell`, configurable with `CLOUDFLARE_IMAGE_MODEL`. Workers AI Free currently includes 10,000 Neurons per day; usage beyond the free allocation requires a paid Workers plan. See Cloudflare's [REST API setup](https://developers.cloudflare.com/workers-ai/get-started/rest-api/), [FLUX.1 schnell model](https://developers.cloudflare.com/workers-ai/models/flux-1-schnell/), and [pricing](https://developers.cloudflare.com/workers-ai/platform/pricing/).
 
 My Music lyrics generation and My Stories story generation use the Groq Chat Completions API from the backend. Add `GROQ_API_KEY` as a secret environment variable on the `manasika-media-api` Render service. The default text model is `openai/gpt-oss-20b`; `GROQ_TEXT_MODEL` can override it. The browser never receives the key, and successful generated text is stored in the existing per-browser-account creative input archive. See [Groq's OpenAI compatibility documentation](https://console.groq.com/docs/openai).
 
 AI Companion can use Groq for contextual replies. It reuses `GROQ_API_KEY` by default; set `COMPANION_GROQ_API_KEY` on the `manasika-media-api` Render service only if you want a separate key. `COMPANION_GROQ_MODEL` defaults to `openai/gpt-oss-20b`. The Companion keeps its existing dataset retrieval and crisis/medical response boundaries. The text model is used only when no curated answer matched, and an unavailable model falls back to the stored dataset response. The browser never receives this key.
 
-`Dockerfile` builds and serves the UI and API together for local/container use. On Render, the static site remains at the existing URL, and the separate API service uses the same Docker image. The Blueprint uses Render's free plan and no persistent disk, so local SQLite data and image files can disappear when the service sleeps, restarts, or redeploys. `render.yaml` creates a server-side session secret and prompts for `POLLINATIONS_API_KEY`, `GROQ_API_KEY`, and `COMPANION_GROQ_API_KEY`; configure these keys on the `manasika-media-api` service before their respective features can run. Browser sessions are anonymous and browser-scoped rather than tied to authenticated Manasika accounts. The API returns a signed session token that the browser stores locally and sends over HTTPS. Render Free services may sleep after inactivity and take about a minute to wake.
+`Dockerfile` builds and serves the UI and API together for local/container use. On Render, the static site remains at the existing URL, and the separate API service uses the same Docker image. The Blueprint uses Render's free plan and no persistent disk, so local SQLite data and image files can disappear when the service sleeps, restarts, or redeploys. `render.yaml` creates a server-side session secret and prompts for `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN`, `GROQ_API_KEY`, and `COMPANION_GROQ_API_KEY`; configure these values on the `manasika-media-api` service before their respective features can run. Browser sessions are anonymous and browser-scoped rather than tied to authenticated Manasika accounts. The API returns a signed session token that the browser stores locally and sends over HTTPS. Render Free services may sleep after inactivity and take about a minute to wake.
 
 ## Feature and data boundaries
 
