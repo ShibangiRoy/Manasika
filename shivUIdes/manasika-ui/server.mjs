@@ -26,9 +26,9 @@ const generationLimitPerHour = Math.min(10, Math.max(1, Number(process.env.MEDIA
 const globalGenerationLimitPerHour = Math.min(100, Math.max(1, Number(process.env.MEDIA_GLOBAL_GENERATIONS_PER_HOUR || 20)));
 const maxImageBytes = 12 * 1024 * 1024;
 const sessionSecret = process.env.MEDIA_SESSION_SECRET || (process.env.NODE_ENV === "production" ? "" : randomBytes(32).toString("base64url"));
-const cloudflareAccountId = process.env.CLOUDFLARE_ACCOUNT_ID || "";
-const cloudflareApiToken = process.env.CLOUDFLARE_API_TOKEN || "";
-const imageModel = process.env.CLOUDFLARE_IMAGE_MODEL || "@cf/black-forest-labs/flux-1-schnell";
+const cloudflareAccountId = (process.env.CLOUDFLARE_ACCOUNT_ID || "").trim();
+const cloudflareApiToken = (process.env.CLOUDFLARE_API_TOKEN || "").trim();
+const imageModel = (process.env.CLOUDFLARE_IMAGE_MODEL || "@cf/black-forest-labs/flux-1-schnell").trim();
 const textProviderKey = process.env.GROQ_API_KEY || "";
 const textProviderModel = process.env.GROQ_TEXT_MODEL || "openai/gpt-oss-20b";
 const companionGroqKey = process.env.COMPANION_GROQ_API_KEY || textProviderKey;
@@ -800,6 +800,10 @@ async function generateImage(req, res, accountId) {
   }
   if (!response.ok) {
     console.warn(`Cloudflare Workers AI image request failed with HTTP ${response.status}.`);
+    const providerErrorBody = await response.clone().json().catch(() => null);
+    const providerDetail = Array.isArray(providerErrorBody?.errors)
+      ? providerErrorBody.errors.map((entry) => typeof entry?.message === "string" ? entry.message : "").filter(Boolean).join(" ").slice(0, 360)
+      : "";
     const cloudflareErrors = {
       400: "Cloudflare rejected the image prompt or model settings. Check the prompt and image model.",
       401: "Cloudflare rejected the API token. Check the token and configured account ID.",
@@ -807,7 +811,8 @@ async function generateImage(req, res, accountId) {
       404: `Cloudflare could not find image model ${imageModel}. Check CLOUDFLARE_IMAGE_MODEL and the account ID.`,
       429: "Cloudflare Workers AI is rate-limited or its daily free allocation is exhausted. Try again later.",
     };
-    return sendJson(res, 502, { error: cloudflareErrors[response.status] || `Cloudflare Workers AI failed (HTTP ${response.status}). Check the token, account ID, model, and daily usage.` });
+    const summary = cloudflareErrors[response.status] || `Cloudflare Workers AI failed (HTTP ${response.status}). Check the token, account ID, model, and daily usage.`;
+    return sendJson(res, 502, { error: providerDetail ? `${summary} ${providerDetail}` : summary });
   }
 
   let providerResult;
