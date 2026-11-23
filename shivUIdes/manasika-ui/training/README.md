@@ -19,13 +19,19 @@ Install the PyTorch build that matches the local CUDA driver if the machine has 
 ## Prepare data and train
 
 ```powershell
+# Re-import the supplied CSV files when the source folder is available:
+python training/import_companion_training_dataset.py --source-dir "../../../AI_companion_training_mndataset"
+
+# Prepare the combined private training file and optionally fine-tune:
 python training/prepare_companion_data.py
 python training/train_companion_lora.py --epochs 1
 ```
 
 The repository includes a **pilot adapter** in `training/weights/companion-smollm2-135m-lora-pilot/`. It was trained for one epoch on a seeded, randomly selected 128-example subset of the 1,310 prepared examples, with 32 optimizer steps on CPU. The training loss was 3.26. This confirms that the fine-tuning pipeline updates LoRA weights, but this small pilot is not a quality benchmark or production-ready model. Re-run the command above to train on the full prepared set; use a GPU and evaluate on held-out prompts before production use. The generated full adapter is saved under ignored `training/output/`.
 
-The preparation step reads the existing base and augmented mental-health support datasets, eligible general/professional examples from `companion_wellbeing_topics.json`, and the public-domain literature corpus. It excludes urgent-tier records, crisis instructions, diagnosis/medication examples, unsafe completions, duplicate pairs, private account conversations, and the locally supplied copyrighted psychology textbook. That textbook remains available only in the ignored local SQLite retrieval database and is not used for training or uploaded.
+The preparation step reads the existing base and augmented mental-health support datasets, eligible general/professional examples from `companion_wellbeing_topics.json`, the response-style examples in `training/datasets/ai_companion_training_mndataset.json`, and the public-domain literature corpus. The response-style data is prepared from the supplied CSV exports by `python training/import_companion_training_dataset.py`; it keeps the source rows and provenance, while training removes question-bearing sentences to preserve the Companion's direct-answer behavior. Urgent-risk, panic, immediate-safety, unsafe clinical, duplicate, private account, and the locally supplied copyrighted psychology-textbook examples are excluded from training. That textbook remains available only in the ignored local SQLite retrieval database and is not used for training or uploaded.
+
+The supplied response dataset did not include a license statement. Keep its provenance with the JSON and verify redistribution rights before publishing the source data or training adapter. Runtime response-style examples are stored in a separate SQLite table and sent to the configured Companion API as tone/structure guidance only; they do not replace the existing support, curated-topic, or literature datasets. To update adapter weights, rerun data preparation and the training command below, then evaluate on held-out prompts.
 
 The resulting JSONL, manifest, model checkpoints, and adapter are all Git-ignored. Training data from user-supplied datasets should only be used if their license and privacy terms permit it. Do not publish the adapter without checking all source-data rights.
 

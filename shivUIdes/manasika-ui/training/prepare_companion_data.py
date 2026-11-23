@@ -12,7 +12,8 @@ from pathlib import Path
 
 APP_ROOT = Path(__file__).resolve().parents[1]
 SYSTEM_PROMPT = (
-    "You are Manasika, a warm and concise wellbeing companion. Answer the user's actual request directly. "
+    "You are Manasika, a warm, concise, grounded wellbeing companion. Answer the user's actual request directly. "
+    "Acknowledge feelings without judgment or forced cheer, and offer one manageable next step when useful. "
     "Do not add follow-up questions. Use supplied memory when relevant and do not invent source facts. "
     "You are not a clinician: do not diagnose or recommend medication. Encourage qualified professional help "
     "for clinical concerns. For imminent danger, direct the person to local emergency services and a trusted person."
@@ -21,7 +22,8 @@ TOPIC = re.compile(r"\b(mental health|mental illness|anxiety|anxious|depress(?:e
 REQUEST = re.compile(r"\b(i am|i'm|i've|i have|my |we |our |how can i|what can i do|i feel|i'm feeling|i want to|i need help)\b", re.I)
 EXCLUDE = re.compile(r"\b(SEC|short[- ]selling|great depression|clinical case|diagnos(?:e|is|tic)|prescrib|medication|dosage|medical consultant|medical professional|act as (?:a|an) (?:doctor|expert|consultant)|research paper|legal implications)\b", re.I)
 UNSAFE_RESPONSE = re.compile(r"\b(dosage|prescribe|prescription|stop taking|start taking|you have (?:bipolar|depression)|you are (?:bipolar|depressed)|diagnos(?:e|is)|suicide method|ways to kill|how to hurt yourself)\b", re.I)
-URGENT = re.compile(r"\b(suicid(?:e|al)|kill myself|end my life|want to die|don't want to live|do not want to live|self[- ]harm|hurt myself|harm myself|overdose|can't keep myself safe|cannot keep myself safe|not safe with myself|kill someone|hurt someone)\b", re.I)
+URGENT = re.compile(r"\b(suicid(?:e|al)|kill myself|end my life|want to die|don't want to live|do not want to live|self[- ]harm|hurt myself|harm myself|overdose|can't keep myself safe|cannot keep myself safe|not safe with myself|unsafe in my own thoughts|struggling to keep myself safe|keep myself safe right now|immediate danger|urgent mental[- ]health help|kill someone|hurt someone)\b", re.I)
+CRISIS_RESPONSE = re.compile(r"\b(real[- ]time support|may hurt yourself|hurt someone else|cannot stay safe|can't stay safe|local emergency services|emergency department|crisis line|immediate danger|safeguarding lead|safety is at risk|urgent support|emergency or crisis support)\b", re.I)
 
 
 def records(path: Path):
@@ -94,11 +96,12 @@ def main():
         root / "public" / "data" / "datasets" / "ai_companion" / "mental_health_support_chat_augmented.json.gz",
     ]
     literature_file = root / "literature-data" / "public-domain-literature.json.gz"
+    style_file = root / "training" / "datasets" / "ai_companion_training_mndataset.json"
     output = args.output.resolve()
     output.parent.mkdir(parents=True, exist_ok=True)
 
     seen = set()
-    counts = {"support": 0, "curated_wellbeing": 0, "literature": 0, "rejected": 0}
+    counts = {"support": 0, "curated_wellbeing": 0, "companion_response_style": 0, "literature": 0, "rejected": 0}
     with output.open("w", encoding="utf-8", newline="\n") as destination:
         for source in support_files:
             if not source.exists():
@@ -142,6 +145,30 @@ def main():
                 destination.write(json.dumps(training_row(prompt, answer), ensure_ascii=False) + "\n")
                 counts["curated_wellbeing"] += 1
 
+        if style_file.exists():
+            style_data = json.loads(style_file.read_text(encoding="utf-8"))
+            if style_data.get("version") != 1 or style_data.get("dataset_key") != "ai_companion_training_mndataset" or not isinstance(style_data.get("records"), list):
+                raise ValueError(f"Unsupported response-style dataset format in {style_file}.")
+            for item in style_data["records"]:
+                prompt = str(item.get("prompt", "")).strip()
+                answer = clean_answer(str(item.get("completion", "")))
+                if (item.get("style_eligible") is False or item.get("topic", "").strip().casefold() in {"panic and intense distress", "safety and supportive planning"}
+                        or not prompt or not answer
+                        or len(prompt) > 12000 or len(answer) > 4000
+                        or UNSAFE_RESPONSE.search(answer) or URGENT.search(prompt) or URGENT.search(answer)
+                        or CRISIS_RESPONSE.search(answer)):
+                    counts["rejected"] += 1
+                    continue
+                topic = str(item.get("topic", "")).strip()
+                if topic:
+                    prompt = f"Topic: {topic}\n{prompt}"
+                digest = hashlib.sha256((prompt.lower() + "\0" + answer.lower()).encode("utf-8")).hexdigest()
+                if digest in seen:
+                    continue
+                seen.add(digest)
+                destination.write(json.dumps(training_row(prompt, answer), ensure_ascii=False) + "\n")
+                counts["companion_response_style"] += 1
+
         if literature_file.exists():
             for item in records(literature_file):
                 content = re.sub(r"\s+", " ", str(item.get("content", ""))).strip()
@@ -153,7 +180,8 @@ def main():
                     continue
                 # Passage-grounded examples teach the model to use its retrieved source context.
                 prompt = f"Answer directly from this passage in {title} by {author} ({section}). Do not add a follow-up question.\n\n{content}"
-                opening = re.split(r"(?<=[.!?])\s+", content)
+                opening = [sentence.strip() for sentence in re.split(r"(?<=[.!?])\s+", content)
+                           if sentence.strip() and "?" not in sentence]
                 answer = f"In {title} by {author} ({section}), the passage describes: {' '.join(opening[:2])}"[:1800]
                 digest = hashlib.sha256((prompt.lower() + "\0" + answer.lower()).encode("utf-8")).hexdigest()
                 if digest in seen:
@@ -162,7 +190,7 @@ def main():
                 destination.write(json.dumps(training_row(prompt, answer), ensure_ascii=False) + "\n")
                 counts["literature"] += 1
 
-    total = counts["support"] + counts["curated_wellbeing"] + counts["literature"]
+    total = counts["support"] + counts["curated_wellbeing"] + counts["companion_response_style"] + counts["literature"]
     if not total:
         output.unlink(missing_ok=True)
         raise SystemExit("No eligible examples were prepared; check that the datasets and literature corpus are present.")

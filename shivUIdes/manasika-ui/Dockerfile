@@ -11,6 +11,7 @@ WORKDIR /app
 COPY --from=build --chown=node:node /app/server.mjs ./server.mjs
 COPY --from=build --chown=node:node /app/dist ./dist
 COPY --from=build --chown=node:node /app/literature-data ./literature-data
+COPY --from=build --chown=node:node /app/training/datasets ./training/datasets
 RUN mkdir -p /app/data/media && chown -R node:node /app/data
 USER node
 EXPOSE 4174
