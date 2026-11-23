@@ -7,6 +7,8 @@ Manasika is a student wellness prototype built from the Figma-exported React app
 - **Local development:** [http://localhost:4173](http://localhost:4173) after starting Vite with the command below.
 - **Public site:** [https://manasika-wellness.onrender.com](https://manasika-wellness.onrender.com) — Render deployment verified live on 15 Nov 2026.
 
+[![Scan to open Manasika](docs/Manasika-Website-QR.png)](https://manasika-wellness.onrender.com)
+
 ## Requirements
 
 - Node.js 22.14 or newer (`.node-version` pins 22.14.0)
