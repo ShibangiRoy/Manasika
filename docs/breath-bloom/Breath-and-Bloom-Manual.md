@@ -235,4 +235,4 @@ Render `<BreathBloomCard />` inside the existing Peace Corner page, preferably b
 - [MDN Web Bluetooth API and browser support caveat](https://developer.mozilla.org/en-US/docs/Web/API/Web_Bluetooth_API)
 - [MDN Web Bluetooth requestDevice and secure-context requirements](https://developer.mozilla.org/en-US/docs/Web/API/Bluetooth/requestDevice)
 
-This documentation uses the exact GPIO and BLE UUID values shown in the included diagram, sketch, and helper. Board/module variations may require adaptation. Test on the actual hardware and browsers before using in a program setting.
+Verify the stated pins and BLE UUIDs against your exact hardware before use.
