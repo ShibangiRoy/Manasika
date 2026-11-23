@@ -2609,6 +2609,39 @@ function Companion({ setPage, profile }: { setPage: (p: Page) => void; profile: 
     },
   ]);
   const [text, setText] = useState("");
+  const formatInline = (value: string) => value.split(/(\*\*[^*]+\*\*|==[^=]+==|\*[^*\n]+\*|`[^`]+`)/g).map((part, index) => {
+    if (part.startsWith("**") && part.endsWith("**")) return <strong key={index}>{part.slice(2, -2)}</strong>;
+    if (part.startsWith("==") && part.endsWith("==")) return <mark key={index}>{part.slice(2, -2)}</mark>;
+    if (part.startsWith("*") && part.endsWith("*")) return <em key={index}>{part.slice(1, -1)}</em>;
+    if (part.startsWith("`") && part.endsWith("`")) return <code key={index}>{part.slice(1, -1)}</code>;
+    return part;
+  });
+  const renderCompanionText = (value: string) => {
+    const blocks: { type: "paragraph" | "heading" | "ul" | "ol"; lines: string[] }[] = [];
+    let current: { type: "paragraph" | "heading" | "ul" | "ol"; lines: string[] } | null = null;
+    const push = () => { if (current?.lines.length) blocks.push(current); current = null; };
+    for (const rawLine of value.replace(/\r/g, "").split("\n")) {
+      const line = rawLine.trim();
+      if (!line) { push(); continue; }
+      const heading = line.match(/^#{1,3}\s+(.+)$/);
+      const unordered = line.match(/^[-*•]\s+(.+)$/);
+      const ordered = line.match(/^\d+[.)]\s+(.+)$/);
+      const type = heading ? "heading" : unordered ? "ul" : ordered ? "ol" : "paragraph";
+      const content = heading?.[1] ?? unordered?.[1] ?? ordered?.[1] ?? line;
+      if (!current || current.type !== type || type === "heading") push();
+      current ??= { type, lines: [] };
+      current.lines.push(content);
+    }
+    push();
+    return blocks.map((block, index) => {
+      if (block.type === "heading") return <h4 key={index}>{formatInline(block.lines[0])}</h4>;
+      if (block.type === "ul" || block.type === "ol") {
+        const List = block.type === "ul" ? "ul" : "ol";
+        return <List key={index}>{block.lines.map((line, lineIndex) => <li key={lineIndex}>{formatInline(line)}</li>)}</List>;
+      }
+      return <p key={index}>{formatInline(block.lines.join(" "))}</p>;
+    });
+  };
   const send = async (value = text) => {
     const message = value.trim();
     if (!message) return;
@@ -2645,7 +2678,7 @@ function Companion({ setPage, profile }: { setPage: (p: Page) => void; profile: 
             {messages.map((m, i) => (
               <div key={m.id || i} className={`message ${m.from}`}>
                 <span>{m.from === "ai" ? <Icon name="spark" /> : "A"}</span>
-                <p>{m.text}</p>
+                {m.from === "ai" ? <div className="message-content">{renderCompanionText(m.text)}</div> : <p>{m.text}</p>}
               </div>
             ))}
           </div>
