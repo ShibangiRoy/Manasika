@@ -1,0 +1,109 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1500" height="1050" viewBox="0 0 1500 1050" role="img" aria-labelledby="title desc">
+  <title id="title">Breath &amp; Bloom ESP32-C6 breadboard plan</title>
+  <desc id="desc">A labeled conceptual wiring diagram for an ESP32-C6 DevKitC-1, I2C OLED, rotary encoder, pushbutton and common-cathode RGB LED with three current-limiting resistors.</desc>
+  <defs>
+    <pattern id="holes" width="24" height="24" patternUnits="userSpaceOnUse"><circle cx="12" cy="12" r="3.2" fill="#b8c1cc"/><circle cx="12" cy="12" r="1.2" fill="#eef2f6"/></pattern>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="130%"><feDropShadow dx="0" dy="5" stdDeviation="8" flood-color="#0b1728" flood-opacity=".13"/></filter>
+    <style>
+      text{font-family:Inter,Segoe UI,Arial,sans-serif;fill:#15263c}.title{font-size:34px;font-weight:750}.subtitle{font-size:16px;fill:#52647a}.label{font-size:16px;font-weight:700}.small{font-size:13px;fill:#52647a}.tiny{font-size:11px;fill:#52647a}.pin{font-size:13px;font-weight:650}.component{fill:#fff;stroke:#35506f;stroke-width:2}.wire{fill:none;stroke-width:4;stroke-linecap:round;stroke-linejoin:round}.card{fill:#fff;stroke:#d7e0ea;stroke-width:1.5}
+    </style>
+  </defs>
+  <rect width="1500" height="1050" fill="#f2f6fa"/>
+  <text x="58" y="68" class="title">Breath &amp; Bloom · Breadboard prototype</text>
+  <text x="60" y="99" class="subtitle">ESP32-C6 DevKitC-1 · OLED breathing guide · rotary encoder · pause button · one RGB LED</text>
+  <rect x="58" y="120" width="1384" height="765" rx="24" fill="#ffffff" filter="url(#shadow)"/>
+
+  <!-- Breadboard body and power rails -->
+  <rect x="100" y="350" width="1300" height="390" rx="24" fill="#f9fbfd" stroke="#cbd5df" stroke-width="2"/>
+  <rect x="120" y="370" width="1260" height="32" rx="8" fill="#f9dfe2"/>
+  <rect x="120" y="688" width="1260" height="32" rx="8" fill="#e1eafa"/>
+  <text x="132" y="392" font-size="14" font-weight="700" fill="#b13c49">+ 3V3 RAIL</text>
+  <text x="132" y="710" font-size="14" font-weight="700" fill="#315a9c">− GND RAIL</text>
+  <rect x="300" y="415" width="1080" height="250" fill="url(#holes)"/>
+  <line x1="300" y1="540" x2="1380" y2="540" stroke="#d1d9e2" stroke-width="3" stroke-dasharray="5 8"/>
+  <text x="1340" y="535" class="tiny">center trench</text>
+
+  <!-- ESP32 board -->
+  <rect x="135" y="455" width="170" height="220" rx="15" fill="#19364c" stroke="#10273a" stroke-width="3"/>
+  <rect x="184" y="485" width="72" height="128" rx="8" fill="#354e5e" stroke="#80919c"/>
+  <rect x="201" y="448" width="38" height="18" rx="3" fill="#b8c3cc"/>
+  <text x="220" y="507" text-anchor="middle" font-size="13" fill="#e9f2f7" font-weight="700">ESP32</text>
+  <text x="220" y="526" text-anchor="middle" font-size="12" fill="#e9f2f7">C6 DevKitC-1</text>
+  <text x="153" y="641" font-size="11" fill="#dbe7ed">USB powers board</text>
+  <circle cx="158" cy="470" r="4" fill="#d9bd61"/><circle cx="282" cy="470" r="4" fill="#d9bd61"/>
+  <circle cx="158" cy="660" r="4" fill="#d9bd61"/><circle cx="282" cy="660" r="4" fill="#d9bd61"/>
+
+  <!-- OLED -->
+  <rect x="405" y="165" width="300" height="142" rx="15" class="component"/>
+  <rect x="430" y="188" width="250" height="86" rx="8" fill="#123c45"/>
+  <text x="555" y="220" text-anchor="middle" font-size="16" fill="#d4f6e8" font-weight="700">BREATHE IN</text>
+  <text x="555" y="247" text-anchor="middle" font-size="13" fill="#c4eee0">slowly · 4</text>
+  <text x="555" y="296" text-anchor="middle" class="label">I²C OLED (check its pin labels)</text>
+  <!-- OLED wires -->
+  <path d="M405 202 H365 V383 H300" class="wire" stroke="#d34c59"/>
+  <path d="M405 226 H378 V708 H300" class="wire" stroke="#334f91"/>
+  <path d="M405 250 H340 V444 H282" class="wire" stroke="#27966d"/>
+  <path d="M405 274 H325 V466 H282" class="wire" stroke="#d39a24"/>
+
+  <!-- Encoder -->
+  <rect x="810" y="165" width="270" height="142" rx="15" class="component"/>
+  <circle cx="945" cy="225" r="39" fill="#dce5ee" stroke="#34516d" stroke-width="3"/>
+  <circle cx="945" cy="225" r="18" fill="#71869a"/>
+  <path d="M945 185 v15" stroke="#fff" stroke-width="5"/>
+  <text x="945" y="294" text-anchor="middle" class="label">Rotary encoder module</text>
+  <path d="M810 203 H720 V383 H300" class="wire" stroke="#d34c59"/>
+  <path d="M810 226 H742 V708 H300" class="wire" stroke="#334f91"/>
+  <path d="M810 250 H770 V490 H282" class="wire" stroke="#6f56a5"/>
+  <path d="M810 274 H790 V512 H282" class="wire" stroke="#168d9a"/>
+  <path d="M810 289 H804 V534 H282" class="wire" stroke="#c57c35"/>
+
+  <!-- Pause button -->
+  <rect x="1160" y="176" width="174" height="118" rx="15" class="component"/>
+  <rect x="1225" y="198" width="45" height="40" rx="8" fill="#e7ecf2" stroke="#70849a" stroke-width="2"/>
+  <circle cx="1247" cy="216" r="10" fill="#54718e"/>
+  <text x="1247" y="271" text-anchor="middle" class="label">Pause button</text>
+  <path d="M1160 219 H1128 V708 H300" class="wire" stroke="#334f91"/>
+  <path d="M1160 255 H1104 V556 H282" class="wire" stroke="#8264b5"/>
+
+  <!-- RGB LED and resistors -->
+  <rect x="1090" y="445" width="245" height="195" rx="18" class="component"/>
+  <text x="1212" y="474" text-anchor="middle" class="label">1 × RGB LED</text>
+  <text x="1212" y="493" text-anchor="middle" class="tiny">assumes common cathode</text>
+  <circle cx="1212" cy="552" r="31" fill="#d9e6f0" stroke="#536f87" stroke-width="2"/>
+  <path d="M1197 578 v26 M1207 580 v26 M1217 580 v26 M1227 578 v26" stroke="#52647a" stroke-width="3"/>
+  <text x="1212" y="628" text-anchor="middle" class="tiny">common leg → GND</text>
+  <path d="M1090 520 H1040 V580 H282" class="wire" stroke="#db5962"/>
+  <path d="M1090 545 H1020 V602 H282" class="wire" stroke="#42a66f"/>
+  <path d="M1090 570 H1000 V624 H282" class="wire" stroke="#547bc4"/>
+  <path d="M1090 610 H970 V708 H300" class="wire" stroke="#334f91"/>
+  <rect x="1048" y="510" width="34" height="20" rx="4" fill="#fff4d8" stroke="#9b6c2d" stroke-width="2"/>
+  <rect x="1048" y="535" width="34" height="20" rx="4" fill="#fff4d8" stroke="#9b6c2d" stroke-width="2"/>
+  <rect x="1048" y="560" width="34" height="20" rx="4" fill="#fff4d8" stroke="#9b6c2d" stroke-width="2"/>
+  <text x="1065" y="524" text-anchor="middle" font-size="8" font-weight="700">R</text>
+  <text x="1065" y="549" text-anchor="middle" font-size="8" font-weight="700">G</text>
+  <text x="1065" y="574" text-anchor="middle" font-size="8" font-weight="700">B</text>
+
+  <!-- pin labels around ESP -->
+  <rect x="320" y="360" width="246" height="52" rx="10" fill="#fff" stroke="#e0e6ed"/>
+  <text x="334" y="382" class="pin">POWER: board 3V3 → red rail</text>
+  <text x="334" y="400" class="pin">board GND → blue rail</text>
+  <rect x="320" y="594" width="320" height="66" rx="10" fill="#fff" stroke="#e0e6ed"/>
+  <text x="334" y="617" class="pin">GPIO6 SDA · GPIO7 SCL</text>
+  <text x="334" y="638" class="pin">GPIO18 CLK · 19 DT · 20 SW</text>
+  <rect x="656" y="594" width="330" height="66" rx="10" fill="#fff" stroke="#e0e6ed"/>
+  <text x="670" y="617" class="pin">GPIO21 pause · GPIO10 red</text>
+  <text x="670" y="638" class="pin">GPIO11 green · GPIO22 blue</text>
+
+  <!-- Simple rail tap markers -->
+  <circle cx="300" cy="383" r="6" fill="#d34c59"/><circle cx="300" cy="708" r="6" fill="#334f91"/>
+  <circle cx="282" cy="444" r="5" fill="#27966d"/><circle cx="282" cy="466" r="5" fill="#d39a24"/>
+  <circle cx="282" cy="490" r="5" fill="#6f56a5"/><circle cx="282" cy="512" r="5" fill="#168d9a"/><circle cx="282" cy="534" r="5" fill="#c57c35"/>
+  <circle cx="282" cy="556" r="5" fill="#8264b5"/><circle cx="282" cy="580" r="5" fill="#db5962"/><circle cx="282" cy="602" r="5" fill="#42a66f"/><circle cx="282" cy="624" r="5" fill="#547bc4"/>
+
+  <!-- Bottom parts list / notes -->
+  <rect x="58" y="910" width="1384" height="108" rx="20" class="card"/>
+  <text x="82" y="943" class="label">Connect the RGB channels through 220–330 Ω resistors</text>
+  <text x="82" y="972" class="small">OLED: VCC→3V3, GND→GND, SDA→GPIO6, SCL→GPIO7 · Encoder: VCC→3V3, GND→GND, CLK→18, DT→19, SW→20</text>
+  <text x="82" y="997" class="small">Pause button: GPIO21→button→GND (INPUT_PULLUP). Common-cathode LED only; verify actual module pinout before power.</text>
+  <text x="1410" y="1040" text-anchor="end" class="tiny">Conceptual wiring plan · verify board/module labels · USB low-voltage power only</text>
+</svg>

@@ -117,6 +117,10 @@ AI Companion can use Groq for contextual replies. It reuses `GROQ_API_KEY` by de
 
 The app includes psychology topics, private reflections, mood check-ins and history, growth goals, guided exercises, student planning, and playful astrology reflections. Profile preferences, check-ins, reflections, goals, and activity are stored in the current browser. Community posts are local drafts and are not sent to other users or synced across devices. Companion replies are prototype guidance, not a connected or fine-tuned model. Cosmic Corner is entertainment and not prediction or life advice.
 
+## Breath & Bloom hardware companion
+
+The repository includes a breadboard plan, ESP32-C6 Arduino firmware, BLE helper, and setup/integration manual for the optional Breath & Bloom grounding device in [`docs/breath-bloom/`](docs/breath-bloom/Breath-and-Bloom-Manual.md). The firmware and wiring are a prototype reference; the current web application does not yet include the BLE connection card. See the manual for browser limits, privacy behavior, and the steps to integrate it into Peace Corner without replacing the existing practices.
+
 ## Project layout
 
 - `shivUIdes/manasika-ui/` — React and Vite application source
