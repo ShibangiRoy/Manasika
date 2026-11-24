@@ -9,6 +9,8 @@ data/
 public/data/*
 !public/data/datasets/
 !public/data/datasets/**
+!public/data/cosmic/
+!public/data/cosmic/**
 .vite/
 vite.config.*.timestamp-*
 *.tsbuildinfo

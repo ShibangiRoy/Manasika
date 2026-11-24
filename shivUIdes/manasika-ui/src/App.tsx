@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import manasikaLogo from "./assets/manasika-logo.webp";
 import { getDatasetReflection } from "./cosmicDataset";
+import { loadAstrologyLibrary, loadCosmicGraph, loadTarotLibrary, type AstrologyLibrary, type CosmicGraph, type CosmicRecord, type GraphNode, type TarotCard, type TarotLibrary } from "./cosmicLibrary";
 import { getCompanionDatasetReply } from "./companionDataset";
 import { getCreativePrompt, saveCreativeOutput } from "./creativeDataset";
 import { deleteCreativeMedia, generateCreativeImage, generateCreativeText as requestCreativeText, getCreativeMediaStatus, getCreativeTrainingConsent, listCreativeMedia, saveCreativeInput, saveTrainingArtwork, setCreativeTrainingConsent, startCreativeSession, type CreativeMediaItem } from "./creativeMediaApi";
@@ -17,6 +18,9 @@ type Page =
   | "student"
   | "creative"
   | "cosmic"
+  | "zodiac-atlas"
+  | "tarot"
+  | "astro-graph"
   | "growth"
   | "companion"
   | "support"
@@ -521,7 +525,7 @@ function AppShell({
           {navItems.map((item) => (
             <button
               key={item.id}
-              className={page === item.id ? "active" : ""}
+              className={page === item.id || (item.id === "cosmic" && ["zodiac-atlas", "tarot", "astro-graph"].includes(page)) ? "active" : ""}
               onClick={() => {
                 setPage(item.id);
                 setMobileOpen(false);
@@ -549,7 +553,7 @@ function AppShell({
         {navItems.slice(0, 4).map((item) => (
           <button
             key={item.id}
-            className={page === item.id ? "active" : ""}
+            className={page === item.id || (item.id === "cosmic" && ["zodiac-atlas", "tarot", "astro-graph"].includes(page)) ? "active" : ""}
             onClick={() => setPage(item.id)}
           >
             <Icon name={item.icon} />
@@ -2469,7 +2473,7 @@ function Creative() {
   );
 }
 
-function Cosmic() {
+function Cosmic({ setPage }: { setPage: (p: Page) => void }) {
   const now = useCurrentTime();
   const [sign, setSign] = useSavedState<ZodiacSign>("manasika.cosmic.sign.v1", "Libra");
   const [birthDate, setBirthDate] = useSavedState("manasika.cosmic.birthdate.v1", "");
@@ -2595,9 +2599,96 @@ function Cosmic() {
           {celebration && <p className="cosmic-celebration">Happy birthday, {sign}! May the year ahead make room for curiosity, rest, and your own pace.</p>}
         </article>
       </section>
+      <section className="cosmic-tools">
+        <Kicker>Explore the sky</Kicker>
+        <h2>Three new ways to wander</h2>
+        <p>Browse the zodiac library, draw a reflective tarot card, or explore how ideas connect across the supplied astrology collections.</p>
+        <div className="cosmic-tool-grid">
+          <article><span className="cosmic-tool-mark">✧</span><h3>Zodiac atlas</h3><p>Sign profiles, dataset notes on transits, retrogrades, lunar and solar themes.</p><Button variant="ghost" onClick={() => setPage("zodiac-atlas")}>Open zodiac atlas</Button></article>
+          <article><span className="cosmic-tool-mark">☾</span><h3>Tarot reflection</h3><p>Explore a card, its traditional symbolism, and a gentle reflection prompt.</p><Button variant="ghost" onClick={() => setPage("tarot")}>Visit tarot</Button></article>
+          <article><span className="cosmic-tool-mark">✦</span><h3>Astrology knowledge map</h3><p>Follow a spherical map of concepts appearing together in the provided datasets.</p><Button variant="ghost" onClick={() => setPage("astro-graph")}>Explore the map</Button></article>
+        </div>
+      </section>
       {compatibilityOpen && <Modal title="Friendship communication styles" close={() => setCompatibilityOpen(false)}><p>This is a playful, traditional astrology reflection—not a measure of compatibility or an outcome forecast.</p><label className="field"><span>Compare {sign} with</span><select value={otherSign} onChange={(event) => setOtherSign(event.target.value as ZodiacSign)}>{zodiacSigns.map((item) => <option key={item}>{item}</option>)}</select></label><div className="recommendation-result"><Icon name="heart" /><div><h3>{sign} + {otherSign}</h3><p>{compatibilityText}</p></div></div><div className="modal-actions"><Button onClick={() => setCompatibilityOpen(false)}>Done</Button></div></Modal>}
     </div>
   );
+}
+
+function CosmicSubPage({ title, subtitle, children, setPage }: { title: string; subtitle: string; children: React.ReactNode; setPage: (p: Page) => void }) {
+  return <div className="page cosmic-page cosmic-subpage"><header className="cosmic-subhead"><Button variant="ghost" onClick={() => setPage("cosmic")} icon="arrow">Cosmic Corner</Button><Kicker>Cosmic Corner</Kicker><h1>{title}</h1><p>{subtitle}</p></header>{children}</div>;
+}
+
+function ZodiacAtlas({ setPage }: { setPage: (p: Page) => void }) {
+  const [sign, setSign] = useSavedState<ZodiacSign>("manasika.cosmic.sign.v1", "Libra");
+  const [library, setLibrary] = useState<AstrologyLibrary | null>(null);
+  const [error, setError] = useState("");
+  const [filter, setFilter] = useState("All");
+  const [query, setQuery] = useState("");
+  const [limit, setLimit] = useState(8);
+  useEffect(() => { let live = true; loadAstrologyLibrary().then((value) => live && setLibrary(value)).catch(() => live && setError("The astrology reference could not be loaded. Please refresh and try again.")); return () => { live = false; }; }, []);
+  const visible = (library?.records || []).filter((record) => {
+    const source = record.source || "";
+    const category = String(record.category || "").toLowerCase();
+    const allText = `${record.title || record.name || ""} ${record.planet || ""} ${record.zodiac_sign || ""} ${record.aspect || ""} ${record.event || ""} ${record.category || ""} ${record.traditional_interpretation || ""} ${record.growth_or_reframing || ""}`.toLowerCase();
+    const kindMatch = filter === "All" || (filter === "Transits" ? source.includes("transit") && category !== "retrograde" : filter === "Retrogrades" ? category.includes("retrograde") || allText.includes("retrograde") : filter === "Natal" ? source.includes("natal") : source.includes("lunar") || source.includes("solar"));
+    const signText = String(record.zodiac_sign || "").toLowerCase();
+    const signMatch = !signText || signText.includes(sign.toLowerCase()) || allText.includes(sign.toLowerCase());
+    return kindMatch && signMatch && (!query || allText.includes(query.toLowerCase()));
+  });
+  const info = zodiacInfo[sign];
+  return <CosmicSubPage setPage={setPage} title="The zodiac atlas" subtitle="Profiles and reflection notes gathered from the added astrology collections.">
+    <div className="zodiac-atlas-layout"><section className="zodiac-atlas-grid" aria-label="Choose a zodiac sign">{zodiacSigns.map((item) => <button key={item} className={`zodiac-atlas-tile ${sign === item ? "selected" : ""}`} onClick={() => { setSign(item); setLimit(8); }}><span>{zodiacInfo[item].symbol}</span><b>{item}</b><small>{zodiacInfo[item].element}</small></button>)}</section>
+    <section className="cosmic-reference-panel"><div className="cosmic-reference-profile"><span className="big-zodiac">{info.symbol}</span><div><Kicker>{sign} · {info.element}</Kicker><h2>{info.archetype}</h2><p>Traditional cultural associations: {info.traits.join(" · ")}. A reflective profile, not a personality assessment.</p></div></div>
+      <div className="cosmic-reference-controls"><div className="tag-wrap">{["All", "Transits", "Retrogrades", "Natal", "Lunar & solar"].map((item) => <Tag key={item} active={filter === item} onClick={() => { setFilter(item); setLimit(8); }}>{item}</Tag>)}</div><input aria-label="Search astrology notes" value={query} onChange={(event) => { setQuery(event.target.value); setLimit(8); }} placeholder="Search planets, houses, themes…" /></div>
+      <p className="cosmic-data-note">Dataset notes are symbolic interpretations, not live planetary calculations. They are not predictions or advice.</p>
+      {error && <p role="status" className="cosmic-error">{error}</p>}
+      {!library && !error && <p>Opening the astrology library…</p>}
+      {library && <><small className="cosmic-count">Showing {Math.min(limit, visible.length)} of {visible.length} matching notes · {library.record_count.toLocaleString()} records in library</small><div className="cosmic-record-list">{visible.slice(0, limit).map((record, index) => <article key={`${record.source}-${record.source_row}-${index}`}><small>{String(record.source).replaceAll("_", " ")} · {String(record.category || "reference").replaceAll("_", " ")}</small><h3>{String(record.title || record.name || record.event || `${record.planet || "Celestial"} reflection`)}</h3><p>{String(record.traditional_interpretation || record.emotional_themes || record.growth_or_reframing || record.interpretation || record.description || record.astronomical_fact || "A reference entry from the supplied astrology dataset.")}</p>{(record.planet || record.house || record.aspect) && <div className="tag-wrap">{record.planet && <Tag>{String(record.planet)}</Tag>}{record.house && <Tag>House {String(record.house)}</Tag>}{record.aspect && <Tag>{String(record.aspect)}</Tag>}</div>}</article>)}</div>{visible.length > limit && <Button variant="secondary" onClick={() => setLimit((n) => n + 8)}>Show more notes</Button>}{visible.length === 0 && <p>No matching dataset notes. Try another sign, category, or search.</p>}</>}
+    </section></div>
+  </CosmicSubPage>;
+}
+
+function TarotZone({ setPage }: { setPage: (p: Page) => void }) {
+  const [library, setLibrary] = useState<TarotLibrary | null>(null);
+  const [selected, setSelected] = useState<TarotCard | null>(null);
+  const [isReversed, setIsReversed] = useState(false);
+  const [drawing, setDrawing] = useState(false);
+  const [error, setError] = useState("");
+  useEffect(() => { let live = true; loadTarotLibrary().then((value) => live && setLibrary(value)).catch(() => live && setError("The tarot library could not be loaded. Please refresh and try again.")); return () => { live = false; }; }, []);
+  const draw = () => { if (!library?.cards.length || drawing) return; setDrawing(true); window.setTimeout(() => { const card = library.cards[Math.floor(Math.random() * library.cards.length)]; setSelected(card); setIsReversed(Math.random() < .35); setDrawing(false); }, 650); };
+  return <CosmicSubPage setPage={setPage} title="A tarot moment" subtitle="A small, playful card draw for reflection. It does not predict the future.">
+    <section className="tarot-zone"><div className={`tarot-deck ${drawing ? "shuffling" : ""}`} aria-label={drawing ? "Shuffling tarot deck" : "A deck of tarot cards"}>{[0,1,2,3,4,5,6].map((item) => <div className="tarot-back" key={item} style={{ "--card-x": `${(item - 3) * 14}px`, "--card-rotation": `${(item - 3) * 7}deg` } as React.CSSProperties}><span>✦<br/>☾</span></div>)}</div><div className="tarot-actions"><Kicker>Pause, breathe, and draw</Kicker><h2>What might be useful to reflect on?</h2><p>Choose a card as a creative prompt. Keep what resonates; leave the rest.</p><Button variant="cosmic" icon="spark" onClick={draw} disabled={!library || drawing}>{drawing ? "Shuffling…" : selected ? "Draw another card" : "Draw a card"}</Button>{library && <small>{library.card_count} illustrated-reference cards · meanings from the supplied tarot collection</small>}{error && <p role="status" className="cosmic-error">{error}</p>}</div>
+    {selected && <article className={`tarot-reveal ${isReversed ? "reversed" : ""}`} aria-live="polite"><div className="tarot-card-face"><small>{selected.arcana}{selected.suit ? ` · ${selected.suit}` : ""}</small><span>{selected.name}</span><i>✦</i></div><div><Kicker>{isReversed ? "Reversed" : "Upright"} · reflective reading</Kicker><h2>{selected.name}</h2><p>{isReversed ? selected.reversed : selected.upright}</p><h3>Traditional symbolism</h3><p>{selected.traditionalSymbolism}</p><h3>A question to sit with</h3><p>{selected.reflection}</p><h3>A gentle next step</h3><p>{selected.action}</p><small>For personal reflection and entertainment. Tarot is not a substitute for professional, medical, financial, or legal guidance.</small></div></article>}
+    <footer className="tarot-source">Traditional reference: <a href="https://www.gutenberg.org/ebooks/43548" target="_blank" rel="noreferrer">A. E. Waite, <i>The Pictorial Key to the Tarot</i> (Project Gutenberg)</a>. Dataset interpretations are presented in brief paraphrase.</footer></section>
+  </CosmicSubPage>;
+}
+
+function AstrologyGraph({ setPage }: { setPage: (p: Page) => void }) {
+  const [graph, setGraph] = useState<CosmicGraph | null>(null);
+  const [selectedId, setSelectedId] = useState("");
+  const [kind, setKind] = useState("All");
+  const [error, setError] = useState("");
+  useEffect(() => { let live = true; loadCosmicGraph().then((value) => live && setGraph(value)).catch(() => live && setError("The knowledge map could not be loaded. Please refresh and try again.")); return () => { live = false; }; }, []);
+  const nodes = useMemo(() => {
+    if (!graph) return [] as GraphNode[];
+    const preferred = graph.nodes.filter((node) => ["sign", "planet", "house", "aspect", "theme", "event", "category", "phase", "dataset"].includes(node.kind.toLowerCase()));
+    const unique = new Map<string, GraphNode>();
+    preferred.sort((a,b) => (b.count - a.count) || a.label.localeCompare(b.label)).forEach((node) => { if (!unique.has(node.id)) unique.set(node.id, node); });
+    const chosen = [...unique.values()];
+    const byKind = (wanted: string, count: number) => chosen.filter((node) => node.kind.toLowerCase() === wanted).slice(0, count);
+    return kind === "All" ? [...byKind("sign",12), ...byKind("planet",14), ...byKind("house",12), ...byKind("aspect",10), ...byKind("theme",10), ...byKind("event",8), ...byKind("phase",6), ...byKind("category",6), ...byKind("dataset",4)].slice(0,72) : byKind(kind === "Zodiac" ? "sign" : kind.toLowerCase(), 48);
+  }, [graph, kind]);
+  const points = useMemo(() => nodes.map((node,index) => { const count = Math.max(nodes.length,1); const y = 1 - (index / Math.max(count - 1,1)) * 2; const radius = Math.sqrt(1-y*y); const theta = Math.PI * (3 - Math.sqrt(5)) * index; const x = Math.cos(theta)*radius; const z = Math.sin(theta)*radius; const perspective = 1 / (1.5 - z*.35); return { node, x: 360 + x * 265 * perspective, y: 255 + y * 195 * perspective, depth:z, size: Math.max(3.5, Math.min(9, 3.5 + Math.log2(node.count+1))) }; }), [nodes]);
+  const byId = new Map(points.map((point) => [point.node.id, point]));
+  const selected = graph?.nodes.find((node) => node.id === selectedId) || null;
+  const links = (graph?.edges || []).filter((edge) => byId.has(edge.source) && byId.has(edge.target)).sort((a,b) => b.count-a.count).slice(0,180);
+  const related = selected ? (graph?.edges || []).filter((edge) => edge.source === selected.id || edge.target === selected.id).map((edge) => graph?.nodes.find((node) => node.id === (edge.source === selected.id ? edge.target : edge.source))).filter((node): node is GraphNode => !!node).sort((a,b) => b.count-a.count).slice(0,6) : [];
+  return <CosmicSubPage setPage={setPage} title="The astrology knowledge map" subtitle="A first, explorable map of concepts appearing together in the supplied astrology datasets.">
+    <section className="cosmic-graph-panel"><div className="cosmic-graph-heading"><div><Kicker>Dataset constellation</Kicker><h2>Follow a thread of meaning</h2><p>Each line represents concepts found together in source records. It does not imply a causal or predictive relationship.</p></div><div className="tag-wrap">{["All", "Zodiac", "Planet", "House", "Aspect", "Theme", "Event", "Phase"].map((item) => <Tag key={item} active={kind === item} onClick={() => setKind(item)}>{item}</Tag>)}</div></div>
+    {error && <p role="status" className="cosmic-error">{error}</p>}{!graph && !error && <p>Gathering the constellation…</p>}
+    {graph && <div className="cosmic-graph-layout"><div className="cosmic-graph-canvas"><svg viewBox="0 0 720 520" role="img" aria-label="Interactive spherical astrology knowledge graph"><defs><radialGradient id="cosmic-sphere" cx="38%" cy="30%"><stop offset="0" stopColor="#fffdf8"/><stop offset="1" stopColor="#e5e5f2"/></radialGradient></defs><circle cx="360" cy="255" r="210" fill="url(#cosmic-sphere)" stroke="#b4a7c4" strokeWidth="1.5"/><ellipse cx="360" cy="255" rx="210" ry="68" fill="none" stroke="#d1c8d9"/><ellipse cx="360" cy="255" rx="210" ry="134" fill="none" stroke="#d1c8d9"/><ellipse cx="360" cy="255" rx="68" ry="210" fill="none" stroke="#d1c8d9"/><ellipse cx="360" cy="255" rx="134" ry="210" fill="none" stroke="#d1c8d9"/>{links.map((edge,index) => { const a=byId.get(edge.source), b=byId.get(edge.target); if(!a||!b)return null; return <line key={`${edge.source}-${edge.target}-${index}`} x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke="#aa9bb8" strokeOpacity={Math.min(.12+edge.count*.04,.4)} strokeWidth=".8"/>; })}{points.map(({node,x,y,depth,size}) => <g key={node.id} className="cosmic-graph-node" role="button" tabIndex={0} aria-label={`${node.label}, ${node.kind}, ${node.count} dataset mentions`} onClick={() => setSelectedId(node.id)} onKeyDown={(event) => { if(event.key === "Enter" || event.key === " "){ event.preventDefault(); setSelectedId(node.id); } }}><circle cx={x} cy={y} r={size+6} fill={node.kind === "zodiac" ? "#e8c895" : node.kind === "planet" ? "#b8b1cd" : "#9bbab0"} opacity={Math.max(.18, .4+depth*.3)}/><circle cx={x} cy={y} r={size} fill={node.kind === "zodiac" ? "#a87e4a" : node.kind === "planet" ? "#756788" : "#527970"}/>{(size >= 6 || selectedId === node.id) && <text x={x} y={y-size-5} textAnchor="middle">{node.label.length > 18 ? `${node.label.slice(0,17)}…` : node.label}</text>}</g>)}</svg><small>Choose a node to inspect its dataset connections · {points.length} nodes shown</small></div><aside className="cosmic-graph-detail"><Kicker>{selected ? selected.kind : "About this map"}</Kicker><h3>{selected?.label || "A sphere of shared ideas"}</h3><p>{selected ? `Appears in ${selected.count.toLocaleString()} dataset records.` : `${graph.nodes.length.toLocaleString()} concepts and ${graph.edges.length.toLocaleString()} co-occurrence links were prepared from the supplied collections.`}</p>{selected && <><small>Connected concepts</small><ul>{related.map((node) => <li key={node.id}><button onClick={() => setSelectedId(node.id)}>{node.label}</button></li>)}</ul></>}<p className="cosmic-data-note">A visual index of text co-occurrence only; not a scientific model or a claim about heavenly influence.</p></aside></div>}
+    </section>
+  </CosmicSubPage>;
 }
 
 function Companion({ setPage, profile }: { setPage: (p: Page) => void; profile: UserProfile }) {
@@ -3100,7 +3191,16 @@ export default function App() {
         content = <Creative />;
         break;
       case "cosmic":
-        content = <Cosmic />;
+        content = <Cosmic setPage={setPage} />;
+        break;
+      case "zodiac-atlas":
+        content = <ZodiacAtlas setPage={setPage} />;
+        break;
+      case "tarot":
+        content = <TarotZone setPage={setPage} />;
+        break;
+      case "astro-graph":
+        content = <AstrologyGraph setPage={setPage} />;
         break;
       case "companion":
         content = <Companion setPage={setPage} profile={profile} />;
