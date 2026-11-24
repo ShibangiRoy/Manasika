@@ -994,7 +994,6 @@ async function generateImage(req, res, accountId) {
       body: JSON.stringify({
         prompt: providerPrompt,
         steps: 4,
-        seed: randomBytes(4).readUInt32BE(0),
       }),
       signal: AbortSignal.timeout(120_000),
     });
