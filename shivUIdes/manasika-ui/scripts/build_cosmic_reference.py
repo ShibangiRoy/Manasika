@@ -143,6 +143,31 @@ def index_terms(record: dict[str, Any], dataset: str) -> set[str]:
         }.items():
             if re.search(pattern, value):
                 terms.add(f"theme:{theme.title()}")
+    # The Vedic karmic lore file is prompt/completion prose rather than
+    # structured astrology records. Index a bounded vocabulary from that text
+    # so its concepts join the existing map without importing generated prose.
+    graph_text = str(record.get("graph_text") or "")
+    if graph_text:
+        for sign in ZODIAC_SIGNS:
+            if re.search(rf"\b{re.escape(sign)}\b", graph_text, re.I):
+                terms.add(f"sign:{sign}")
+        for planet in PLANETS:
+            if re.search(rf"\b{re.escape(planet)}\b", graph_text, re.I):
+                terms.add(f"planet:{planet}")
+        for concept, pattern in {
+            "Karma": r"\bkarm(?:a|ic)(?: balance)?\b",
+            "Nakshatra": r"\bnakshatra(?:s)?\b",
+            "Graha": r"\bgrahas?\b",
+            "Dharma": r"\bdharma\b",
+            "Moksha": r"\bmoksha\b",
+            "Rahu": r"\brahu\b",
+            "Ketu": r"\bketu\b",
+            "Dasha": r"\bdashas?\b|vimshottari",
+            "Lagna": r"\blagna\b|ascendant",
+            "Rashi": r"\brashi(?:s)?\b",
+        }.items():
+            if re.search(pattern, graph_text, re.I):
+                terms.add(f"theme:{concept}")
     return terms
 
 
@@ -252,6 +277,7 @@ def main() -> None:
     reframing_rows = rows_from_json(source / "positive_astro_reframing.json")
     lunar_rows = rows_from_zip(source / "lunar_solar_self_reflection.zip", "lunar_solar_self_reflection.json")
     tarot_rows = rows_from_zip(source / "tarot_reading_interpretations.zip", "tarot_reading_interpretations.json")
+    vedic_rows = rows_from_json(source / "vedic_astrology_karmic_lore.json")
 
     astrology_records: list[dict[str, Any]] = []
     parsed_by_source: dict[str, int] = {}
@@ -274,9 +300,18 @@ def main() -> None:
                 parsed_count += 1
         parsed_by_source[dataset] = parsed_count
 
+    graph_records = astrology_records + [
+        {
+            "source": "vedic_astrology_karmic_lore",
+            "source_row": row_number,
+            "graph_text": f"{row.get('enhanced_prompt', '')}\n{row.get('enhanced_completion', '')}",
+        }
+        for row_number, row in enumerate(vedic_rows, start=1)
+    ]
     tarot, tarot_parsed_count = tarot_cards(tarot_rows)
     source_rows["tarot_reading_interpretations"] = len(tarot_rows)
-    graph = graph_from(astrology_records, source_rows)
+    graph_source_rows = {**source_rows, "vedic_astrology_karmic_lore": len(vedic_rows)}
+    graph = graph_from(graph_records, graph_source_rows)
     output.mkdir(parents=True, exist_ok=True)
     (output / "astrology-reference.json").write_text(
         json.dumps({"version": 1, "record_count": len(astrology_records), "source_rows": source_rows, "records": astrology_records}, ensure_ascii=False, separators=(",", ":")) + "\n",
@@ -293,6 +328,7 @@ def main() -> None:
         "source_rows": source_rows,
         "parsed_astrology_records": parsed_by_source,
         "tarot_records_parsed": tarot_parsed_count,
+        "vedic_graph_records": len(vedic_rows),
         "canonical_tarot_cards": len(tarot),
         "graph_nodes": len(graph["nodes"]),
         "graph_edges": len(graph["edges"]),

@@ -7,6 +7,7 @@ Expected source files next to the checkout:
 - `astro_transits_and_growth.json`
 - `natal_chart_reflections.json`
 - `positive_astro_reframing.json`
+- `vedic_astrology_karmic_lore.json` (indexed into the knowledge graph as Vedic concept/sign/planet co-occurrences)
 - `lunar_solar_self_reflection.zip` (contains `lunar_solar_self_reflection.json`)
 - `tarot_reading_interpretations.zip` (contains `tarot_reading_interpretations.json`)
 
@@ -17,4 +18,4 @@ python scripts/build_cosmic_reference.py --source-dir "../../../zodiac_db"
 npm run build
 ```
 
-The Zodiac Atlas labels entries as dataset interpretations rather than live astronomical calculations. The graph links concepts that co-occur in the supplied astrology records; links do not represent causality or prediction. Tarot is offered for entertainment and personal reflection. Original datasets and the existing Cosmic Corner data remain separate and unchanged.
+The Zodiac Atlas labels entries as dataset interpretations rather than live astronomical calculations. The Vedic karmic lore set is used only to add graph co-occurrences; it does not replace or fine-tune the Atlas or Tarot data. The graph links concepts that co-occur in the supplied astrology records; links do not represent causality or prediction. Tarot is offered for entertainment and personal reflection. Original datasets and the existing Cosmic Corner data remain separate and unchanged.
