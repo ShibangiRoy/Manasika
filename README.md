@@ -43,6 +43,10 @@ npm run preview -- --host 0.0.0.0 --port 4173
 
 After a deployment, run `npm run verify:deployment` from `shivUIdes/manasika-ui` to check the public site, deployed creative controls, backend health, and presence of the Cloudflare and Groq environment settings. This check does not generate images or text, so it does not consume provider quota.
 
+### Automatic API wake-up
+
+When someone opens the site, the browser now checks the API health endpoint and retries briefly while the Render Free service wakes from sleep. This is a lightweight health check: it does not create a session, call an AI provider, or consume generation quota. The first API action can still take longer if Render is cold-starting. Git pushes are handled by Render's GitHub auto-deploy pipeline; opening the site cannot safely trigger a new deployment for every visitor. Save API key changes in the Render service environment to apply them; secrets remain server-side.
+
 Render keeps the Figma UI at [https://manasika-wellness.onrender.com](https://manasika-wellness.onrender.com) as a static site. A separate free Docker web service, `manasika-media-api`, serves the API. The frontend calls that service through `VITE_CREATIVE_MEDIA_API_URL`; the API allows requests only from the Manasika site origin. The free service has ephemeral storage: its SQLite database and generated image archive can be cleared when it sleeps, restarts, or redeploys.
 
 ## Date and time behavior

@@ -38,6 +38,7 @@ react(),
       strictPort: true,
       proxy: {
         '/api': process.env.MANASIKA_API_PROXY || 'http://127.0.0.1:4174',
+        '/healthz': process.env.MANASIKA_API_PROXY || 'http://127.0.0.1:4174',
       },
       watch: {
         ignored: [

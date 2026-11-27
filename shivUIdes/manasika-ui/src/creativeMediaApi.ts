@@ -19,6 +19,30 @@ export type CreativeMediaStatus = {
 const apiBase = (import.meta.env.VITE_CREATIVE_MEDIA_API_URL || "").replace(/\/$/, "");
 const sessionStorageKey = "manasika-creative-media-session";
 let sessionPromise: Promise<{ ready: boolean; accountType: string; token: string }> | null = null;
+let warmupPromise: Promise<boolean> | null = null;
+
+/** Wake a sleeping API service without creating a session or calling a paid provider. */
+export function warmCreativeApi() {
+  if (!warmupPromise) {
+    warmupPromise = (async () => {
+      const delays = [0, 2_000, 4_000, 7_000, 10_000, 10_000, 10_000, 10_000];
+      for (const delay of delays) {
+        if (delay) await new Promise((resolve) => window.setTimeout(resolve, delay));
+        try {
+          const response = await fetch(`${apiBase}/healthz`, {
+            cache: "no-store",
+            signal: AbortSignal.timeout(12_000),
+          });
+          if (response.ok) return true;
+        } catch {
+          // Render may still be waking or restarting. Continue with a bounded retry.
+        }
+      }
+      return false;
+    })().finally(() => { warmupPromise = null; });
+  }
+  return warmupPromise;
+}
 
 async function apiRequest<T>(url: string, init?: RequestInit): Promise<T> {
   const headers = new Headers(init?.headers);

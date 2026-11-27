@@ -4,7 +4,7 @@ import { getDatasetReflection } from "./cosmicDataset";
 import { loadAstrologyLibrary, loadCosmicGraph, loadTarotLibrary, type AstrologyLibrary, type CosmicGraph, type CosmicRecord, type GraphNode, type TarotCard, type TarotLibrary } from "./cosmicLibrary";
 import { getCompanionDatasetReply } from "./companionDataset";
 import { getCreativePrompt, saveCreativeOutput } from "./creativeDataset";
-import { deleteCreativeMedia, generateCreativeImage, generateCreativeText as requestCreativeText, getCreativeMediaStatus, getCreativeTrainingConsent, listCreativeMedia, saveCreativeInput, saveTrainingArtwork, setCreativeTrainingConsent, startCreativeSession, type CreativeMediaItem } from "./creativeMediaApi";
+import { deleteCreativeMedia, generateCreativeImage, generateCreativeText as requestCreativeText, getCreativeMediaStatus, getCreativeTrainingConsent, listCreativeMedia, saveCreativeInput, saveTrainingArtwork, setCreativeTrainingConsent, startCreativeSession, warmCreativeApi, type CreativeMediaItem } from "./creativeMediaApi";
 
 type Page =
   | "home"
@@ -3160,6 +3160,7 @@ function Settings({ close, profile, setProfile, checkIns, activity, clearLocalDa
 
 export default function App() {
   const [page, setPageState] = useState<Page>("home");
+  useEffect(() => { void warmCreativeApi(); }, []);
   const currentTime = useCurrentTime();
   const [profile, setProfile] = useSavedState<UserProfile>("manasika.profile.v1", defaultProfile);
   const [checkIns, setCheckIns] = useSavedState<MoodCheckIn[]>("manasika.checkins.v1", []);
