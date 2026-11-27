@@ -24,6 +24,7 @@ type Page =
   | "growth"
   | "companion"
   | "support"
+  | "contact"
   | "community";
 
 type IconName =
@@ -579,6 +580,7 @@ function Landing({ setPage }: { setPage: (p: Page) => void }) {
           <button onClick={() => setPage("peace")}>Peace Corner</button>
           <button onClick={() => setPage("student")}>Student Life</button>
           <button onClick={() => setPage("cosmic")}>Cosmic Corner</button>
+          <button onClick={() => setPage("contact")}>Contact Us</button>
         </nav>
         <div className="landing-actions">
           <Button variant="ghost" onClick={() => setPage("dashboard")}>
@@ -737,7 +739,7 @@ function Landing({ setPage }: { setPage: (p: Page) => void }) {
           “A little space for your mind, a little kindness for yourself, and a little hope for
           tomorrow.”
         </p>
-        <span>Educational wellness support, not medical care.</span>
+        <div className="landing-footer-links"><span>Educational wellness support, not medical care.</span><button onClick={() => setPage("contact")}>Contact Us <Icon name="arrow" size={14} /></button></div>
       </footer>
     </div>
   );
@@ -3013,8 +3015,17 @@ function Support() {
           ))}
         </div>
       </section>
+      <section className="support-contact-card">
+        <span className="card-icon"><Icon name="heart" /></span>
+        <div><Kicker>A note to our team</Kicker><h2>Something on your mind?</h2><p>Questions, ideas, or a kind word—we’d love to hear from you.</p></div>
+        <a className="btn btn-secondary" href="mailto:manasika2026@gmail.com?subject=Hello%20Manasika">Contact Us <Icon name="arrow" size={16} /></a>
+      </section>
     </div>
   );
+}
+
+function ContactPage() {
+  return <div className="page contact-page"><PageHeader eyebrow="Contact Manasika" title="A little note can open a new door." text="Share a question, an idea, or what you hope Manasika can become. We’re listening."/><section className="contact-card"><span className="contact-symbol"><Icon name="chat" size={28}/></span><Kicker>We’d love to hear from you</Kicker><h2>Let’s keep the conversation kind.</h2><p>Reach the Manasika team by email. We welcome thoughtful feedback, collaboration ideas, and questions about the project.</p><a className="contact-email" href="mailto:manasika2026@gmail.com?subject=Hello%20Manasika">manasika2026@gmail.com <Icon name="arrow" size={17}/></a><small>Opens your email app with a message to the Manasika team.</small></section></div>;
 }
 
 function Modal({
@@ -3227,6 +3238,9 @@ export default function App() {
         break;
       case "support":
         content = <Support />;
+        break;
+      case "contact":
+        content = <ContactPage />;
         break;
       case "community":
         content = <Community profile={profile} posts={posts} setPosts={setPosts} joinedGroups={joinedGroups} setJoinedGroups={setJoinedGroups} onActivity={(action) => logActivity(action, "Community")} />;
