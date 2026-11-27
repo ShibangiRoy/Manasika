@@ -81,6 +81,8 @@ type CommunityPost = {
 type ActivityItem = { id: string; date: string; action: string; area: string };
 type ReflectionEntry = { id: number; date: string; localDay?: string; title: string; text: string; mood?: number | null };
 
+const contactGmailUrl = "https://mail.google.com/mail/?view=cm&fs=1&to=manasika2026%40gmail.com&su=Hello%20Manasika";
+
 const defaultProfile: UserProfile = {
   name: "",
   likes: [],
@@ -3018,14 +3020,14 @@ function Support() {
       <section className="support-contact-card">
         <span className="card-icon"><Icon name="heart" /></span>
         <div><Kicker>A note to our team</Kicker><h2>Something on your mind?</h2><p>Questions, ideas, or a kind word—we’d love to hear from you.</p></div>
-        <a className="btn btn-secondary" href="mailto:manasika2026@gmail.com?subject=Hello%20Manasika">Contact Us <Icon name="arrow" size={16} /></a>
+        <a className="btn btn-secondary" href={contactGmailUrl} target="_blank" rel="noreferrer">Contact Us <Icon name="arrow" size={16} /></a>
       </section>
     </div>
   );
 }
 
 function ContactPage() {
-  return <div className="page contact-page"><PageHeader eyebrow="Contact Manasika" title="A little note can open a new door." text="Share a question, an idea, or what you hope Manasika can become. We’re listening."/><section className="contact-card"><span className="contact-symbol"><Icon name="chat" size={28}/></span><Kicker>We’d love to hear from you</Kicker><h2>Let’s keep the conversation kind.</h2><p>Reach the Manasika team by email. We welcome thoughtful feedback, collaboration ideas, and questions about the project.</p><a className="contact-email" href="mailto:manasika2026@gmail.com?subject=Hello%20Manasika">manasika2026@gmail.com <Icon name="arrow" size={17}/></a><small>Opens your email app with a message to the Manasika team.</small></section></div>;
+  return <div className="page contact-page"><PageHeader eyebrow="Contact Manasika" title="A little note can open a new door." text="Share a question, an idea, or what you hope Manasika can become. We’re listening."/><section className="contact-card"><span className="contact-symbol"><Icon name="chat" size={28}/></span><Kicker>We’d love to hear from you</Kicker><h2>Let’s keep the conversation kind.</h2><p>Reach the Manasika team by email. We welcome thoughtful feedback, collaboration ideas, and questions about the project.</p><a className="contact-email" href={contactGmailUrl} target="_blank" rel="noreferrer">manasika2026@gmail.com <Icon name="arrow" size={17}/></a><small>Opens a Gmail compose window addressed to the Manasika team.</small></section></div>;
 }
 
 function Modal({
