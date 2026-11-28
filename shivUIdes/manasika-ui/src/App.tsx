@@ -4,7 +4,7 @@ import { getDatasetReflection } from "./cosmicDataset";
 import { loadAstrologyLibrary, loadCosmicGraph, loadTarotLibrary, type AstrologyLibrary, type CosmicGraph, type CosmicRecord, type GraphNode, type TarotCard, type TarotLibrary } from "./cosmicLibrary";
 import { getCompanionDatasetReply } from "./companionDataset";
 import { getCreativePrompt, saveCreativeOutput } from "./creativeDataset";
-import { deleteCreativeMedia, generateCreativeImage, generateCreativeText as requestCreativeText, getCreativeMediaStatus, getCreativeTrainingConsent, listCreativeMedia, saveCreativeInput, saveTrainingArtwork, setCreativeTrainingConsent, startCreativeSession, warmCreativeApi, type CreativeMediaItem } from "./creativeMediaApi";
+import { deleteCreativeFile, deleteCreativeMedia, downloadCreativeFile, generateCreativeImage, generateCreativeText as requestCreativeText, getCreativeMediaStatus, getCreativeTrainingConsent, listCreativeMedia, listCreativeUploads, renameCreativeFile, saveCreativeInput, saveTrainingArtwork, setCreativeTrainingConsent, startCreativeSession, uploadCreativeFile, warmCreativeApi, type CreativeMediaItem, type CreativeUpload, type CreativeUploadMedium } from "./creativeMediaApi";
 
 type Page =
   | "home"
@@ -2088,9 +2088,44 @@ function Growth({ checkIns, activity }: { checkIns: MoodCheckIn[]; activity: Act
   );
 }
 
+function formatFileSize(bytes: number) {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function CreativeLibrary({ medium, items, available, uploading, error, onUpload, onRename, onDelete, onDownload }: {
+  medium: CreativeUploadMedium;
+  items: CreativeUpload[];
+  available: boolean;
+  uploading: boolean;
+  error: string;
+  onUpload: (file: File) => void;
+  onRename: (item: CreativeUpload, name: string) => void;
+  onDelete: (item: CreativeUpload) => void;
+  onDownload: (item: CreativeUpload) => void;
+}) {
+  const labels = { image: "My Art files", music: "My Music files", story: "My Story files" };
+  const accepts = { image: "image/png,image/jpeg,image/webp,image/gif", music: ".txt,.mp3,.wav,.m4a,.aac,.flac,.ogg,.opus,.webm", story: ".txt,.md,.pdf,.docx,.rtf" };
+  return <section className="creative-library" aria-label={labels[medium]}>
+    <div className="creative-library-head"><div><Kicker>PRIVATE FILE LIBRARY</Kicker><h2>{labels[medium]}</h2><p>Files saved to your private browser-account archive · up to 25 MB each</p></div><label className={`upload-btn ${!available || uploading ? "disabled" : ""}`}><input type="file" accept={accepts[medium]} disabled={!available || uploading} onChange={(event) => { const file=event.target.files?.[0]; if(file) onUpload(file); event.currentTarget.value=""; }}/><Icon name="plus"/>{uploading ? "Saving file…" : "Add file"}</label></div>
+    {error && <p className="creative-library-status" role="alert">{error}</p>}
+    {!available && !error && <p className="creative-library-status" role="status">Connecting to your private file archive…</p>}
+    {items.length ? <div className="creative-file-list">{items.map((item) => <CreativeFileRow key={item.id} item={item} onRename={onRename} onDelete={onDelete} onDownload={onDownload}/>)}</div> : <div className="creative-library-empty"><Icon name={medium === "image" ? "palette" : medium === "music" ? "play" : "journal"}/><p>Your saved files will appear here. Add a file to start your library.</p></div>}
+  </section>;
+}
+
+function CreativeFileRow({ item, onRename, onDelete, onDownload }: { item: CreativeUpload; onRename: (item: CreativeUpload, name: string) => void; onDelete: (item: CreativeUpload) => void; onDownload: (item: CreativeUpload) => void }) {
+  const [name, setName] = useState(item.displayName);
+  const [editing, setEditing] = useState(false);
+  useEffect(() => setName(item.displayName), [item.displayName]);
+  return <article className="creative-file-row"><span className="creative-file-icon"><Icon name={item.medium === "image" ? "palette" : item.medium === "music" ? "play" : "journal"}/></span><div className="creative-file-details">{editing ? <input aria-label={`Rename ${item.displayName}`} maxLength={120} value={name} onChange={(event) => setName(event.target.value)} onKeyDown={(event) => { if(event.key === "Enter" && name.trim()){ onRename(item,name.trim()); setEditing(false); } if(event.key === "Escape"){ setName(item.displayName); setEditing(false); } }}/> : <strong>{item.displayName}</strong>}<small>{item.originalName} · {formatFileSize(item.sizeBytes)} · {new Date(item.createdAt).toLocaleDateString()}</small></div><div className="creative-file-actions">{editing ? <><button type="button" onClick={() => { if(name.trim()) onRename(item,name.trim()); setEditing(false); }}>Save name</button><button type="button" onClick={() => { setName(item.displayName); setEditing(false); }}>Cancel</button></> : <button type="button" onClick={() => setEditing(true)}><Icon name="edit"/> Rename</button>}<button type="button" onClick={() => onDownload(item)}><Icon name="arrow"/> Download</button><button type="button" onClick={() => onDelete(item)} aria-label={`Remove ${item.displayName}`}><Icon name="trash"/> Remove</button></div></article>;
+}
+
 function Creative() {
   const [tab, setTab] = useState("My Art");
   const [story, setStory] = useState("");
+  const [storyTitle, setStoryTitle] = useState("");
   const [generatedLyrics, setGeneratedLyrics] = useState("");
   const [generatedStory, setGeneratedStory] = useState("");
   const [textGenerating, setTextGenerating] = useState<"music" | "story" | null>(null);
@@ -2112,6 +2147,9 @@ function Creative() {
   const [artworkFile, setArtworkFile] = useState<File | null>(null);
   const [audioFile, setAudioFile] = useState<File | null>(null);
   const [mediaItems, setMediaItems] = useState<CreativeMediaItem[]>([]);
+  const [uploads, setUploads] = useState<Record<CreativeUploadMedium, CreativeUpload[]>>({ image: [], music: [], story: [] });
+  const [uploadingMedium, setUploadingMedium] = useState<CreativeUploadMedium | null>(null);
+  const [uploadError, setUploadError] = useState("");
   const [mediaConfigured, setMediaConfigured] = useState(false);
   const [textGenerationConfigured, setTextGenerationConfigured] = useState(false);
   const [mediaAvailable, setMediaAvailable] = useState(false);
@@ -2144,7 +2182,7 @@ function Creative() {
     let active = true;
     (async () => {
       await startCreativeSession();
-      const [status, items, training] = await Promise.all([getCreativeMediaStatus(), listCreativeMedia(), getCreativeTrainingConsent()]);
+      const [status, items, training, artUploads, musicUploads, storyUploads] = await Promise.all([getCreativeMediaStatus(), listCreativeMedia(), getCreativeTrainingConsent(), listCreativeUploads("image"), listCreativeUploads("music"), listCreativeUploads("story")]);
       if (!active) return;
       setMediaAvailable(true);
       setMediaConfigured(status.providerConfigured);
@@ -2152,6 +2190,7 @@ function Creative() {
       setTextGenerationStatus(status.textGenerationConfigured ? "ready" : "missing-key");
       setMediaArchiveDays(status.archiveDays);
       setMediaItems(items);
+      setUploads({ image: artUploads, music: musicUploads, story: storyUploads });
       setTrainingConsent(training.enabled);
       if (!status.providerConfigured) setMediaError("Image generation needs a server-side provider key.");
     })().catch(() => {
@@ -2216,8 +2255,50 @@ function Creative() {
     }
   };
 
+  const saveUploadedFile = async (medium: CreativeUploadMedium, file: File) => {
+    setUploadError("");
+    if (file.size > 25 * 1024 * 1024) { setUploadError("Files must be 25 MB or smaller."); return; }
+    setUploadingMedium(medium);
+    try {
+      const item = await uploadCreativeFile(medium, file);
+      setUploads((current) => ({ ...current, [medium]: [item, ...current[medium]] }));
+    } catch (error) {
+      setUploadError(error instanceof Error ? error.message : "This file could not be saved. Please try again.");
+    } finally { setUploadingMedium(null); }
+  };
+
+  const renameUploadedFile = async (item: CreativeUpload, name: string) => {
+    setUploadError("");
+    try {
+      const updated = await renameCreativeFile(item.id, name);
+      setUploads((current) => ({ ...current, [item.medium]: current[item.medium].map((file) => file.id === item.id ? updated : file) }));
+    } catch (error) { setUploadError(error instanceof Error ? error.message : "The file name could not be updated."); }
+  };
+
+  const removeUploadedFile = async (item: CreativeUpload) => {
+    if (!window.confirm(`Remove “${item.displayName}” from your private library?`)) return;
+    setUploadError("");
+    try {
+      await deleteCreativeFile(item.id);
+      setUploads((current) => ({ ...current, [item.medium]: current[item.medium].filter((file) => file.id !== item.id) }));
+    } catch (error) { setUploadError(error instanceof Error ? error.message : "This file could not be removed."); }
+  };
+
+  const downloadUploadedFile = async (item: CreativeUpload) => {
+    setUploadError("");
+    try {
+      const blob = await downloadCreativeFile(item.id);
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = item.originalName;
+      link.click();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1_000);
+    } catch (error) { setUploadError(error instanceof Error ? error.message : "The file could not be downloaded."); }
+  };
+
   const saveArtwork = async () => {
-    const [didSave, didPersist, didTrainArtwork] = await Promise.all([
+    const [didSave, didPersist, didTrainArtwork, uploaded] = await Promise.all([
       saveCreativeOutput({
       kind: "image",
       prompt: artPrompt,
@@ -2226,9 +2307,13 @@ function Creative() {
       }),
       saveCreativeInput("image", artPrompt).then(() => true).catch(() => false),
       trainingConsent && artworkFile ? saveTrainingArtwork(artworkFile, artPrompt).then(() => true).catch(() => false) : Promise.resolve(true),
+      artworkFile ? uploadCreativeFile("image", artworkFile).catch(() => null) : Promise.resolve(null),
     ]);
+    if (uploaded) setUploads((current) => ({ ...current, image: [uploaded, ...current.image] }));
+    if (uploaded) setArtworkFile(null);
     setSaved(didSave);
-    setMediaError(!didPersist ? "Saved on this device; the permanent archive is currently unavailable."
+    setMediaError(artworkFile && !uploaded ? "Saved on this device, but the artwork could not be added to the backend file library."
+      : !didPersist ? "Saved on this device; the permanent archive is currently unavailable."
       : !didTrainArtwork ? "Saved privately, but this artwork could not be added to the opt-in example database." : "");
   };
 
@@ -2250,28 +2335,40 @@ function Creative() {
 
   const saveMusicNote = async () => {
     if (!musicNote.trim()) return;
-    const [didSave, didPersist] = await Promise.all([
+    const noteFile = new File([musicNote], "Music note.txt", { type: "text/plain" });
+    const [didSave, didPersist, uploadedNote, uploadedAudio] = await Promise.all([
       saveCreativeOutput({
-      kind: "music",
-      prompt: musicPrompt || musicNote,
-      content: musicNote,
-      ...(audioFile ? { file: audioFile, fileName: audioFile.name, mimeType: audioFile.type } : {}),
+        kind: "music",
+        prompt: musicPrompt || musicNote,
+        content: musicNote,
+        ...(audioFile ? { file: audioFile, fileName: audioFile.name, mimeType: audioFile.type } : {}),
       }),
       saveCreativeInput("music", musicPrompt || musicNote, musicNote).then(() => true).catch(() => false),
+      uploadCreativeFile("music", noteFile).catch(() => null),
+      audioFile ? uploadCreativeFile("music", audioFile).catch(() => null) : Promise.resolve(null),
     ]);
+    const storedFiles = [uploadedNote, uploadedAudio].filter((item): item is CreativeUpload => !!item);
+    if (storedFiles.length) setUploads((current) => ({ ...current, music: [...storedFiles, ...current.music] }));
+    if (audioFile && uploadedAudio) setAudioFile(null);
     setSaved(didSave);
-    window.alert(didSave && didPersist ? "Your music note was saved privately." : didSave ? "Saved in this browser; the permanent archive is currently unavailable." : "This browser could not save the music note.");
+    window.alert(didSave && didPersist && uploadedNote && (!audioFile || uploadedAudio) ? "Your music note and selected audio were saved privately." : didSave ? "Saved in this browser; one or more files could not be added to the backend library." : "This browser could not save your music note.");
   };
 
   const saveStory = async () => {
     if (!story.trim()) return;
-    const [didSave, didPersist] = await Promise.all([
+    const filename = `${(storyTitle.trim() || "Untitled story").replace(/[\\/:*?"<>|]/g, "-")}.txt`;
+    const storyFile = new File([story], filename, { type: "text/plain" });
+    const [didSave, didPersist, uploaded] = await Promise.all([
       saveCreativeOutput({ kind: "story", prompt: storyPrompt, content: story }),
       saveCreativeInput("story", storyPrompt, story).then(() => true).catch(() => false),
+      uploadCreativeFile("story", storyFile).catch(() => null),
     ]);
+    if (uploaded) setUploads((current) => ({ ...current, story: [uploaded, ...current.story] }));
     setSaved(didSave);
-    if (!didPersist) window.alert("Your story is saved in this browser; the permanent archive is currently unavailable.");
+    if (uploaded) setStoryTitle(uploaded.displayName);
+    if (!didPersist || !uploaded) window.alert("Your story is saved in this browser, but could not be added to the backend file library.");
   };
+
   return (
     <div className="page">
       <PageHeader
@@ -2386,9 +2483,11 @@ function Creative() {
             <div className="creative-media-empty"><Icon name="spark" /><p>Generated images will appear here after your first creation.</p></div>
           )}
         </section>
+        <CreativeLibrary medium="image" items={uploads.image} available={mediaAvailable} uploading={uploadingMedium === "image"} error={uploadError} onUpload={(file) => void saveUploadedFile("image", file)} onRename={(item, name) => void renameUploadedFile(item, name)} onDelete={(item) => void removeUploadedFile(item)} onDownload={(item) => void downloadUploadedFile(item)} />
         </>
       )}
       {tab === "My Music" && (
+        <>
         <div className="creative-layout">
           <section className="creation-card music-journal">
             <span className="record">
@@ -2435,11 +2534,14 @@ function Creative() {
             {textGenerationError && <p className="creative-media-status" role="alert">{textGenerationError}</p>}
           </aside>
         </div>
+        <CreativeLibrary medium="music" items={uploads.music} available={mediaAvailable} uploading={uploadingMedium === "music"} error={uploadError} onUpload={(file) => void saveUploadedFile("music", file)} onRename={(item, name) => void renameUploadedFile(item, name)} onDelete={(item) => void removeUploadedFile(item)} onDownload={(item) => void downloadUploadedFile(item)} />
+        </>
       )}
       {tab === "My Stories" && (
+        <>
         <div className="creative-layout">
           <section className="creation-card story-editor">
-            <input placeholder="Untitled story" />
+            <input value={storyTitle} onChange={(event) => setStoryTitle(event.target.value)} placeholder="Untitled story" aria-label="Story file name" />
             <textarea
               value={story}
               onChange={(e) => {
@@ -2472,6 +2574,8 @@ function Creative() {
             {textGenerationError && <p className="creative-media-status" role="alert">{textGenerationError}</p>}
           </aside>
         </div>
+        <CreativeLibrary medium="story" items={uploads.story} available={mediaAvailable} uploading={uploadingMedium === "story"} error={uploadError} onUpload={(file) => void saveUploadedFile("story", file)} onRename={(item, name) => void renameUploadedFile(item, name)} onDelete={(item) => void removeUploadedFile(item)} onDownload={(item) => void downloadUploadedFile(item)} />
+        </>
       )}
     </div>
   );

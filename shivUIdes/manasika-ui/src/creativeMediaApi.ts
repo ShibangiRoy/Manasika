@@ -16,6 +16,18 @@ export type CreativeMediaStatus = {
   generationLimitPerHour: number;
 };
 
+export type CreativeUploadMedium = "image" | "music" | "story";
+export type CreativeUpload = {
+  id: string;
+  medium: CreativeUploadMedium;
+  displayName: string;
+  originalName: string;
+  mimeType: string;
+  sizeBytes: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
 const apiBase = (import.meta.env.VITE_CREATIVE_MEDIA_API_URL || "").replace(/\/$/, "");
 const sessionStorageKey = "manasika-creative-media-session";
 let sessionPromise: Promise<{ ready: boolean; accountType: string; token: string }> | null = null;
@@ -109,6 +121,53 @@ export async function saveTrainingArtwork(file: File, prompt: string) {
 export async function listCreativeMedia() {
   const result = await apiRequest<{ items: CreativeMediaItem[] }>("/api/creative/media");
   return result.items;
+}
+
+export async function listCreativeUploads(medium: CreativeUploadMedium) {
+  await startCreativeSession();
+  const result = await apiRequest<{ items: CreativeUpload[] }>(`/api/creative/uploads?medium=${medium}`);
+  return result.items;
+}
+
+export async function uploadCreativeFile(medium: CreativeUploadMedium, file: File) {
+  await startCreativeSession();
+  const result = await apiRequest<{ item: CreativeUpload }>(`/api/creative/uploads?medium=${medium}`, {
+    method: "POST",
+    headers: { "Content-Type": file.type || "application/octet-stream", "X-File-Name": encodeURIComponent(file.name) },
+    body: file,
+  });
+  return result.item;
+}
+
+export async function renameCreativeFile(id: string, displayName: string) {
+  await startCreativeSession();
+  const result = await apiRequest<{ item: CreativeUpload }>(`/api/creative/uploads/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ displayName }),
+  });
+  return result.item;
+}
+
+export async function deleteCreativeFile(id: string) {
+  await startCreativeSession();
+  return apiRequest<{ deleted: boolean }>(`/api/creative/uploads/${encodeURIComponent(id)}`, { method: "DELETE" });
+}
+
+export async function downloadCreativeFile(id: string) {
+  await startCreativeSession();
+  const headers = new Headers();
+  const token = localStorage.getItem(sessionStorageKey);
+  if (token) headers.set("Authorization", `Bearer ${token}`);
+  const response = await fetch(`${apiBase}/api/creative/uploads/${encodeURIComponent(id)}/file`, {
+    headers,
+    credentials: apiBase ? "omit" : "same-origin",
+  });
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({})) as { error?: string };
+    throw new Error(body.error || `File download failed (${response.status}).`);
+  }
+  return response.blob();
 }
 
 export function generateCreativeImage(prompt: string) {

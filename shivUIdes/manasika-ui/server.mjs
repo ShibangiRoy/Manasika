@@ -18,6 +18,7 @@ try {
 const distDir = path.resolve(process.env.MANASIKA_DIST_DIR || path.join(appRoot, "dist"));
 const dataDir = path.resolve(process.env.MANASIKA_MEDIA_DATA_DIR || path.join(appRoot, "data"));
 const mediaDir = path.join(dataDir, "media");
+const creativeUploadsDir = path.join(dataDir, "creative-uploads");
 const trainingMediaDir = path.join(dataDir, "training-media");
 const dbPath = path.resolve(process.env.MANASIKA_MEDIA_DB_PATH || path.join(dataDir, "creative.sqlite"));
 const trainingDbPath = path.resolve(process.env.MANASIKA_TRAINING_DB_PATH || path.join(dataDir, "creative-training.sqlite"));
@@ -27,6 +28,7 @@ const retentionDays = Math.min(90, Math.max(1, Number(process.env.MEDIA_RETENTIO
 const generationLimitPerHour = Math.min(10, Math.max(1, Number(process.env.MEDIA_GENERATIONS_PER_HOUR || 3)));
 const globalGenerationLimitPerHour = Math.min(100, Math.max(1, Number(process.env.MEDIA_GLOBAL_GENERATIONS_PER_HOUR || 20)));
 const maxImageBytes = 12 * 1024 * 1024;
+const maxCreativeUploadBytes = 25 * 1024 * 1024;
 const cloudflarePromptPrefix = "Create an original image from this brief: ";
 const cloudflarePromptDirection = " Visual direction: polished and gently uplifting, with a clear focal point, soft natural light, refined detail, and balanced composition. Blend sapphire blue and turquoise with warm cottagecore accents only where they suit the requested subject. Keep the requested subject central and include no lettering or logos.";
 const maxCloudflarePromptLength = 2048;
@@ -53,6 +55,7 @@ if (!sessionSecret) {
 }
 
 await mkdir(mediaDir, { recursive: true });
+await mkdir(creativeUploadsDir, { recursive: true });
 await mkdir(trainingMediaDir, { recursive: true });
 await mkdir(path.dirname(trainingDbPath), { recursive: true });
 const database = new DatabaseSync(dbPath);
@@ -85,6 +88,20 @@ database.exec(`
     created_at TEXT NOT NULL
   );
   CREATE INDEX IF NOT EXISTS creative_inputs_account_created ON creative_user_inputs(account_id, created_at DESC);
+  CREATE TABLE IF NOT EXISTS creative_uploads (
+    id TEXT PRIMARY KEY,
+    account_id TEXT NOT NULL REFERENCES creative_accounts(id) ON DELETE CASCADE,
+    medium TEXT NOT NULL CHECK (medium IN ('image', 'music', 'story')),
+    display_name TEXT NOT NULL,
+    original_name TEXT NOT NULL,
+    mime_type TEXT NOT NULL,
+    size_bytes INTEGER NOT NULL,
+    file_path TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS creative_uploads_account_medium_created
+    ON creative_uploads(account_id, medium, created_at DESC);
   CREATE TABLE IF NOT EXISTS ai_companion_memory (
     id INTEGER PRIMARY KEY,
     prompt TEXT NOT NULL,
@@ -562,6 +579,15 @@ const countRecent = database.prepare(`SELECT COUNT(*) AS count FROM creative_med
   WHERE account_id = ? AND created_at >= ?`);
 const countGlobalRecent = database.prepare("SELECT COUNT(*) AS count FROM creative_media WHERE created_at >= ?");
 const deleteMedia = database.prepare("DELETE FROM creative_media WHERE id = ? AND account_id = ?");
+const insertCreativeUpload = database.prepare(`INSERT INTO creative_uploads
+  (id, account_id, medium, display_name, original_name, mime_type, size_bytes, file_path, created_at, updated_at)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+const listCreativeUploads = database.prepare(`SELECT id, medium, display_name, original_name, mime_type, size_bytes, created_at, updated_at
+  FROM creative_uploads WHERE account_id = ? AND medium = ? ORDER BY created_at DESC LIMIT 200`);
+const getCreativeUpload = database.prepare(`SELECT id, account_id, medium, display_name, original_name, mime_type, size_bytes, file_path, created_at, updated_at
+  FROM creative_uploads WHERE id = ? AND account_id = ?`);
+const renameCreativeUpload = database.prepare(`UPDATE creative_uploads SET display_name = ?, updated_at = ? WHERE id = ? AND account_id = ?`);
+const deleteCreativeUpload = database.prepare("DELETE FROM creative_uploads WHERE id = ? AND account_id = ?");
 const insertCreativeInput = database.prepare(`INSERT INTO creative_user_inputs(id, account_id, medium, prompt, content, created_at)
   VALUES (?, ?, ?, ?, ?, ?)`);
 const listCompanionMemory = database.prepare("SELECT prompt, completion FROM ai_companion_memory");
@@ -647,6 +673,61 @@ async function readJson(req, limit = 16_000) {
     if (raw.length > limit) throw new Error("Request is too large.");
   }
   try { return JSON.parse(raw || "{}"); } catch { throw new Error("Request JSON is invalid."); }
+}
+
+async function readBinary(req, limit) {
+  const declaredLength = Number(req.headers["content-length"] || 0);
+  if (declaredLength > limit) throw new Error("File is larger than the 25 MB upload limit.");
+  const chunks = [];
+  let size = 0;
+  for await (const chunk of req) {
+    size += chunk.length;
+    if (size > limit) throw new Error("File is larger than the 25 MB upload limit.");
+    chunks.push(chunk);
+  }
+  if (!size) throw new Error("Choose a file before uploading.");
+  return Buffer.concat(chunks, size);
+}
+
+const creativeUploadTypes = {
+  image: {
+    png: { mime: "image/png", types: ["image/png"] },
+    jpg: { mime: "image/jpeg", types: ["image/jpeg"] },
+    jpeg: { mime: "image/jpeg", types: ["image/jpeg"] },
+    webp: { mime: "image/webp", types: ["image/webp"] },
+    gif: { mime: "image/gif", types: ["image/gif"] },
+  },
+  music: {
+    txt: { mime: "text/plain", types: ["text/plain"] },
+    mp3: { mime: "audio/mpeg", types: ["audio/mpeg", "audio/mp3"] },
+    wav: { mime: "audio/wav", types: ["audio/wav", "audio/x-wav"] },
+    m4a: { mime: "audio/mp4", types: ["audio/mp4", "audio/x-m4a"] },
+    aac: { mime: "audio/aac", types: ["audio/aac", "audio/mp4"] },
+    flac: { mime: "audio/flac", types: ["audio/flac", "audio/x-flac"] },
+    ogg: { mime: "audio/ogg", types: ["audio/ogg", "application/ogg"] },
+    opus: { mime: "audio/ogg", types: ["audio/ogg", "audio/opus"] },
+    webm: { mime: "audio/webm", types: ["audio/webm"] },
+  },
+  story: {
+    txt: { mime: "text/plain", types: ["text/plain"] },
+    md: { mime: "text/markdown", types: ["text/markdown", "text/plain"] },
+    pdf: { mime: "application/pdf", types: ["application/pdf"] },
+    docx: { mime: "application/vnd.openxmlformats-officedocument.wordprocessingml.document", types: ["application/vnd.openxmlformats-officedocument.wordprocessingml.document"] },
+    rtf: { mime: "application/rtf", types: ["application/rtf", "text/rtf"] },
+  },
+};
+
+function creativeUploadDto(row) {
+  return {
+    id: row.id,
+    medium: row.medium,
+    displayName: row.display_name,
+    originalName: row.original_name,
+    mimeType: row.mime_type,
+    sizeBytes: row.size_bytes,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
 }
 
 function trainingEnabled(accountId) {
@@ -1142,8 +1223,8 @@ async function handleRequest(req, res) {
     if (origin) {
       res.setHeader("Access-Control-Allow-Origin", origin);
       res.setHeader("Vary", "Origin");
-      res.setHeader("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS");
-      res.setHeader("Access-Control-Allow-Headers", "Authorization, Content-Type");
+      res.setHeader("Access-Control-Allow-Methods", "GET, POST, PATCH, DELETE, OPTIONS");
+      res.setHeader("Access-Control-Allow-Headers", "Authorization, Content-Type, X-File-Name");
       res.setHeader("Access-Control-Max-Age", "600");
     }
     if (req.method === "OPTIONS") {
@@ -1157,6 +1238,83 @@ async function handleRequest(req, res) {
     }
     const accountId = sessionAccount(req);
     if (!accountId) return sendJson(res, 401, { error: "Open Creative Space again to start a private archive session." });
+
+    if (pathname === "/api/creative/uploads" && req.method === "GET") {
+      const medium = url.searchParams.get("medium");
+      if (!Object.hasOwn(creativeUploadTypes, medium)) return sendJson(res, 400, { error: "Choose Art, Music, or Stories to view its saved files." });
+      return sendJson(res, 200, { items: listCreativeUploads.all(accountId, medium).map(creativeUploadDto) });
+    }
+    if (pathname === "/api/creative/uploads" && req.method === "POST") {
+      const medium = url.searchParams.get("medium");
+      if (!Object.hasOwn(creativeUploadTypes, medium)) return sendJson(res, 400, { error: "Choose Art, Music, or Stories for this upload." });
+      let originalName = "";
+      try { originalName = decodeURIComponent(String(req.headers["x-file-name"] || "")); } catch { return sendJson(res, 400, { error: "The filename could not be read." }); }
+      originalName = path.win32.basename(path.basename(originalName)).replace(/[\u0000-\u001f\u007f]/g, "").trim().slice(0, 240);
+      const extension = path.extname(originalName).slice(1).toLowerCase();
+      const fileType = creativeUploadTypes[medium][extension];
+      const suppliedType = String(req.headers["content-type"] || "application/octet-stream").split(";")[0].trim().toLowerCase();
+      if (!originalName || !fileType || (suppliedType !== "application/octet-stream" && !fileType.types.includes(suppliedType))) {
+        return sendJson(res, 400, { error: medium === "image" ? "Upload a PNG, JPEG, WebP, or GIF image." : medium === "music" ? "Upload an MP3, WAV, M4A, AAC, FLAC, OGG, OPUS, or WEBM audio file." : "Upload a TXT, Markdown, PDF, DOCX, or RTF story file." });
+      }
+      let bytes;
+      try { bytes = await readBinary(req, maxCreativeUploadBytes); } catch (error) {
+        return sendJson(res, error.message.includes("25 MB") ? 413 : 400, { error: error.message });
+      }
+      const imageSignatures = {
+        png: bytes.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])),
+        jpg: bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff,
+        jpeg: bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff,
+        webp: bytes.subarray(0, 4).toString() === "RIFF" && bytes.subarray(8, 12).toString() === "WEBP",
+        gif: bytes.subarray(0, 3).toString() === "GIF",
+      };
+      if (medium === "image" && !imageSignatures[extension]) return sendJson(res, 400, { error: "The uploaded file contents do not match its image type." });
+      if (extension === "pdf" && bytes.subarray(0, 5).toString() !== "%PDF-") return sendJson(res, 400, { error: "The uploaded file contents do not match PDF format." });
+      const id = randomUUID();
+      const createdAt = new Date().toISOString();
+      const displayName = path.basename(originalName, path.extname(originalName)).slice(0, 120) || "Untitled file";
+      const filePath = path.join(creativeUploadsDir, `${id}.${extension}`);
+      try {
+        await writeFile(filePath, bytes, { flag: "wx" });
+        insertCreativeUpload.run(id, accountId, medium, displayName, originalName, fileType.mime, bytes.length, filePath, createdAt, createdAt);
+      } catch (error) {
+        await rm(filePath, { force: true }).catch(() => {});
+        console.warn("Creative upload could not be stored:", error?.message || error);
+        return sendJson(res, 500, { error: "The file could not be saved to your private library." });
+      }
+      const record = getCreativeUpload.get(id, accountId);
+      return sendJson(res, 201, { item: creativeUploadDto(record) });
+    }
+    const uploadFileMatch = /^\/api\/creative\/uploads\/([0-9a-f-]{36})\/file$/i.exec(pathname);
+    if (uploadFileMatch && req.method === "GET") {
+      const record = getCreativeUpload.get(uploadFileMatch[1], accountId);
+      if (!record) return sendJson(res, 404, { error: "This file was not found in your private library." });
+      try {
+        const bytes = await readFile(record.file_path);
+        const filename = encodeURIComponent(record.original_name).replace(/['()]/g, (character) => `%${character.charCodeAt(0).toString(16).toUpperCase()}`).replace(/\*/g, "%2A");
+        res.writeHead(200, { "Content-Type": "application/octet-stream", "Content-Disposition": `attachment; filename*=UTF-8''${filename}`, "Content-Length": bytes.length, "Cache-Control": "private, no-store" });
+        return res.end(bytes);
+      } catch {
+        return sendJson(res, 404, { error: "This file is no longer available on the media service." });
+      }
+    }
+    const uploadMatch = /^\/api\/creative\/uploads\/([0-9a-f-]{36})$/i.exec(pathname);
+    if (uploadMatch && req.method === "PATCH") {
+      let body;
+      try { body = await readJson(req, 2_000); } catch (error) { return sendJson(res, 400, { error: error.message }); }
+      const displayName = typeof body.displayName === "string" ? body.displayName.replace(/[\u0000-\u001f\u007f]/g, "").trim().slice(0, 120) : "";
+      if (!displayName) return sendJson(res, 400, { error: "Enter a name up to 120 characters." });
+      const existing = getCreativeUpload.get(uploadMatch[1], accountId);
+      if (!existing) return sendJson(res, 404, { error: "This file was not found in your private library." });
+      renameCreativeUpload.run(displayName, new Date().toISOString(), uploadMatch[1], accountId);
+      return sendJson(res, 200, { item: creativeUploadDto(getCreativeUpload.get(uploadMatch[1], accountId)) });
+    }
+    if (uploadMatch && req.method === "DELETE") {
+      const existing = getCreativeUpload.get(uploadMatch[1], accountId);
+      if (!existing) return sendJson(res, 404, { error: "This file was not found in your private library." });
+      await rm(existing.file_path, { force: true }).catch(() => {});
+      deleteCreativeUpload.run(uploadMatch[1], accountId);
+      return sendJson(res, 200, { deleted: true });
+    }
 
     if (req.method === "GET" && pathname === "/api/creative/status") {
       return sendJson(res, 200, {

@@ -94,6 +94,10 @@ Creative Space includes an opt-in control for sharing saved prompts, lyrics, sto
 
 This is runtime example retrieval, not automatic model-weight training or fine-tuning. The archive is scoped to an anonymous browser session, not a verified user account. `MANASIKA_TRAINING_DB_PATH` can override the default database location. On Render Free, both SQLite files and image archives are ephemeral and may be erased on sleep, restart, or redeploy; durable shared memory requires a persistent volume or managed database.
 
+### Private Creative Space uploads
+
+My Art, My Music, and My Stories include a private file library for user uploads and saved creations. Each browser session can list its files by section, rename them, download them, or remove them. The backend stores file metadata in SQLite and file bytes under `data/creative-uploads/`; individual files are limited to 25 MB and accepted formats are listed by each upload control. These records use the same anonymous browser session as the creative archive, not a verified login. Render Free storage is temporary and can be cleared on sleep, restart, or redeploy, so users should download important files. For durable archives, attach a persistent disk or move the file store and metadata to managed persistent storage.
+
 ### Run the media backend locally
 
 The development UI proxies `/api` requests to the local media server. Use two terminals from `shivUIdes/manasika-ui`:
